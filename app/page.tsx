@@ -2082,26 +2082,27 @@ function DemoPullRequestWorkspace({
   const [stage, setStage] = useState<"draft" | "reviewed" | "ready" | "merged">(
     "draft",
   );
-  const active = changes[0];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const active = changes[activeIndex];
   if (stage === "merged")
     return (
       <>
         <PageTitle
           eyebrow="DELIVERY / MERGED"
-          title="Production-readiness changes merged"
+          title="Simulated merge completed"
         >
-          <Badge>DEMO</Badge>
+          <Badge>DEMO · MERGED</Badge>
         </PageTitle>
         <div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">
-          Demo result — no repository write or deployment occurred.
+          Simulation only — no repository write or real deployment occurred.
         </div>
         <div className="panel p-8 text-center">
           <CheckCircle2 size={42} className="text-emerald-400 mx-auto" />
-          <h2 className="text-2xl mt-5">Merge completed</h2>
+          <h2 className="text-2xl mt-5">Preview of successful delivery</h2>
           <p className="text-zinc-500 text-sm mt-2">
             PR #42 was squash-merged into{" "}
             <code>{result.repository.branch}</code>. A connected Vercel project
-            would now start deployment.
+            would now start deployment. In this demo, that outcome is simulated.
           </p>
           <div className="grid md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-7">
             <Metric label="MERGE COMMIT" value="demo9a1" />
@@ -2111,6 +2112,7 @@ function DemoPullRequestWorkspace({
             />
             <Metric label="BRANCH" value="Deleted" />
           </div>
+          <div className="mt-4 text-sm text-emerald-400">Deployment triggered · simulated</div>
           <button onClick={onExit} className="secondary mt-6">
             Return to real PR setup
           </button>
@@ -2126,8 +2128,8 @@ function DemoPullRequestWorkspace({
         <Badge>DEMO · {stage.toUpperCase()}</Badge>
       </PageTitle>
       <div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">
-        Interactive demo — these review and merge actions do not write to
-        GitHub.
+        Interactive demo — preview the final workflow without modifying GitHub
+        or triggering a real deployment.
       </div>
       <div className="grid lg:grid-cols-[1fr_350px] gap-4">
         <section className="panel">
@@ -2147,12 +2149,25 @@ function DemoPullRequestWorkspace({
                 {result.repository.branch}
               </code>
             </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-5">
+              {changes.map((change, index) => (
+                <button
+                  key={change.path}
+                  onClick={() => setActiveIndex(index)}
+                  className={`border p-3 text-left text-xs transition-colors ${activeIndex === index ? "border-accent bg-accent/10 text-white" : "border-line text-zinc-500 hover:text-white"}`}
+                >
+                  <code className="block truncate">{change.path}</code>
+                  <span className="block mt-1 capitalize text-[10px]">{change.agentId} agent · {change.status}</span>
+                </button>
+              ))}
+            </div>
             {active && (
               <>
                 <div className="panel-head mt-5">
                   <code>{active.path}</code>
                   <span className="text-emerald-400">Proposed</span>
                 </div>
+                <p className="border-x border-line px-4 py-3 text-xs text-zinc-500">{active.reason}</p>
                 <pre className="p-4 bg-black/20 overflow-auto text-xs leading-6">
                   {active.diff}
                 </pre>
@@ -2195,7 +2210,7 @@ function DemoPullRequestWorkspace({
               onClick={() => setStage("merged")}
               className="primary w-full justify-center mt-4 disabled:opacity-40"
             >
-              <GitPullRequest size={15} /> Merge for deployment
+              <GitPullRequest size={15} /> Simulate merge for deployment
             </button>
           </section>
           <button onClick={onExit} className="secondary w-full justify-center">
