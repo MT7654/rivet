@@ -43,7 +43,7 @@ export default function Home() {
       localStorage.setItem("rivet:last-repository", url);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Analysis failed"); setScreen("connect");
-    } finally { window.clearInterval(ticker); setGithubToken(""); }
+    } finally { window.clearInterval(ticker); }
   }
 
   async function runAgents() {
@@ -56,8 +56,8 @@ export default function Home() {
       try {
         const response = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: `Act as the ${agent.name} for ${result.repository.owner}/${result.repository.name}. Analyse only these evidence-backed findings and produce a concise remediation report with priorities, implementation guidance, risks, and validation steps. Do not claim that changes were applied or validated.\n\n${JSON.stringify(relevant.map(({ title, severity, explanation, remediation, file, evidence }) => ({ title, severity, explanation, remediation, file, evidence })))}` }) });
         const data = await response.json();
-        reports[id] = response.ok ? data.content : `GLM report unavailable: ${data.error || "request failed"}`;
-      } catch { reports[id] = "GLM report unavailable. Deterministic remediation proposals were still generated."; }
+        reports[id] = response.ok ? data.content : `Qwen report unavailable: ${data.error || "request failed"}`;
+      } catch { reports[id] = "Qwen report unavailable. Deterministic remediation proposals were still generated."; }
     }));
     setAgentReports(reports); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
   }
@@ -74,7 +74,7 @@ export default function Home() {
     {screen === "agents" && <Agents findings={result.findings} selected={selected} setSelected={setSelected} onRun={runAgents} />}
     {screen === "execution" && <Execution result={result} selected={selected} state={executionState} changes={changes} onStart={runAgents} onReview={() => setScreen("changes")} />}
     {screen === "changes" && <Changes changes={changes} reports={agentReports} result={result} onAgents={() => setScreen("agents")} onPR={() => setScreen("pr")} />}
-    {screen === "pr" && <PullRequest result={result} selected={selected} changes={changes} />}
+    {screen === "pr" && <PullRequest result={result} selected={selected} changes={changes} githubToken={githubToken} setGithubToken={setGithubToken} />}
     {screen === "reports" && <Reports result={result} selected={selected} changes={changes} onReanalyse={() => analyse(result.repository.url)} onAnother={() => { setResult(null); setRepositoryUrl(""); setScreen("connect"); }} />}
   </AppShell>;
 }
@@ -133,15 +133,17 @@ function Changes({ changes, reports, result, onAgents, onPR }: { changes: Propos
 
 function ReviewTab({ tab, result, changes, reports }: { tab: string; result: AnalysisResult; changes: ProposedChange[]; reports: Record<string, string> }) {
   if (tab === "Overview") return <div className="panel p-6"><h3>{changes.length} proposed files</h3><p className="text-zinc-500 text-sm mt-2">These proposals address {new Set(changes.map((c) => c.agentId)).size} specialist areas and could improve readiness from {result.score} to approximately {result.projectedScore}. No target repository files have been changed.</p></div>;
-  if (tab === "Agent Reports") return <div className="space-y-3">{agentCatalog.filter((a) => changes.some((c) => c.agentId === a.id)).map((a) => <div className="panel p-5" key={a.id}><div className="flex justify-between"><h3>{a.name}</h3><Badge>GLM 5.2</Badge></div><p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">{reports[a.id] || "No model report returned."}</p></div>)}</div>;
+  if (tab === "Agent Reports") return <div className="space-y-3">{agentCatalog.filter((a) => changes.some((c) => c.agentId === a.id)).map((a) => <div className="panel p-5" key={a.id}><div className="flex justify-between"><h3>{a.name}</h3><Badge>QWEN 3.6</Badge></div><p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">{reports[a.id] || "No model report returned."}</p></div>)}</div>;
   if (tab === "Validation") return <div className="panel p-6 space-y-4">{[["Generated-file syntax","Passed"],["Finding-to-change traceability","Passed"],["Dependency installation","Not run"],["Lint, tests, and build","Requires isolated runner"]].map(([name,status]) => <div className="flex justify-between text-sm border-b border-line pb-4" key={name}><span>{name}</span><span className={status === "Passed" ? "text-emerald-400" : "text-amber-300"}>{status}</span></div>)}</div>;
-  return <div className="panel p-6"><h3>Estimated usage</h3><p className="text-sm text-zinc-500 mt-2">Token estimates are planning values. Monetary cost is not shown because GLM 5.2 provider pricing has not been verified.</p></div>;
+  return <div className="panel p-6"><h3>Estimated usage</h3><p className="text-sm text-zinc-500 mt-2">Token estimates are planning values. Monetary cost is not shown because Qwen 3.6 provider pricing has not been verified.</p></div>;
 }
 
-function PullRequest({ result, selected, changes }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[] }) {
+function PullRequest({ result, selected, changes, githubToken, setGithubToken }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[]; githubToken: string; setGithubToken: (value: string) => void }) {
+  const [confirmed, setConfirmed] = useState(false); const [creating, setCreating] = useState(false); const [error, setError] = useState(""); const [created, setCreated] = useState<{ url: string; number: number; branch: string } | null>(null);
   if (!changes.length) return <Empty icon={GitPullRequest} title="No pull request to prepare" body="Generate and review proposed changes first."/>;
   const description = `## Summary\n\nRivet prepared production-readiness improvements for ${result.repository.owner}/${result.repository.name}.\n\n## Agents activated\n\n${selected.map((id) => `- ${agentCatalog.find((a) => a.id === id)?.name}`).join("\n")}\n\n## Files proposed\n\n${changes.map((c) => `- \`${c.path}\` — ${c.reason}`).join("\n")}\n\n## Validation\n\nGenerated-file syntax and traceability checks completed. Install, lint, test, and build validation must run in the target repository.\n\n## Human review\n\nReview every hunk before creating a branch or draft pull request. Rivet has not written to the repository.`;
-  return <><PageTitle eyebrow="GITHUB / DRAFT PR" title="Rivet: Production-readiness improvements"><Badge>PREVIEW ONLY</Badge></PageTitle><div className="grid lg:grid-cols-[1fr_310px] gap-4"><article className="panel p-7 prose-rivet"><pre className="whitespace-pre-wrap font-sans text-sm text-zinc-400 leading-7">{description}</pre></article><aside className="panel p-5 h-fit"><Metric label="READINESS" value={`${result.score} → ${result.projectedScore}`}/><Metric label="FILES" value={String(changes.length)}/><Metric label="AGENTS" value={String(selected.length)}/><button onClick={() => navigator.clipboard.writeText(description)} className="secondary w-full justify-center mt-5">Copy PR description</button><button disabled className="w-full bg-zinc-800 text-zinc-500 py-2.5 mt-2 text-sm">GitHub write authorization required</button><p className="text-[11px] text-zinc-600 mt-4 leading-5">Creating a branch and draft PR requires a GitHub App or user-scoped OAuth connection. Public repository analysis alone does not grant write access.</p></aside></div></>;
+  async function createDraftPR() { setCreating(true); setError(""); try { const response = await fetch("/api/github/draft-pr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ repositoryUrl: result.repository.url, baseBranch: result.repository.branch, githubToken, changes, title: "Rivet: Production-readiness improvements", description }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Draft pull request creation failed"); setCreated(data); setGithubToken(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Draft pull request creation failed"); } finally { setCreating(false); } }
+  return <><PageTitle eyebrow="GITHUB / DRAFT PR" title="Rivet: Production-readiness improvements"><Badge>{created ? "CREATED" : "PREVIEW"}</Badge></PageTitle><div className="grid lg:grid-cols-[1fr_330px] gap-4"><article className="panel p-7 prose-rivet"><pre className="whitespace-pre-wrap font-sans text-sm text-zinc-400 leading-7">{description}</pre></article><aside className="panel p-5 h-fit"><Metric label="READINESS" value={`${result.score} → ${result.projectedScore}`}/><Metric label="FILES" value={String(changes.length)}/><Metric label="AGENTS" value={String(selected.length)}/><button onClick={() => navigator.clipboard.writeText(description)} className="secondary w-full justify-center mt-5">Copy PR description</button>{created ? <a href={created.url} target="_blank" rel="noreferrer" className="primary w-full justify-center mt-2">Open draft PR #{created.number} <ExternalLink size={15}/></a> : <><Field label="Fine-grained GitHub token"><input type="password" autoComplete="off" value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder="Contents + Pull requests: Read and write" className="input mt-2"/></Field><label className="flex gap-2 items-start text-xs text-zinc-500 mt-4"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5"/><span>Create a new branch from <code>{result.repository.branch}</code>, commit these {changes.length} proposed files, and open a draft pull request. Do not merge.</span></label><button disabled={!githubToken.trim() || !confirmed || creating} onClick={createDraftPR} className="primary w-full justify-center mt-4 disabled:opacity-40">{creating ? <Loader2 size={15} className="animate-spin"/> : <GitPullRequest size={15}/>} Create draft pull request</button></>}{error && <p className="text-xs text-red-300 mt-3 leading-5">{error}</p>}<p className="text-[11px] text-zinc-600 mt-4 leading-5">The token is sent only to Rivet’s server for this action, is never logged or persisted, and is cleared after success. Rivet never writes to the default branch or merges automatically.</p></aside></div></>;
 }
 
 function Reports({ result, selected, changes, onReanalyse, onAnother }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[]; onReanalyse: () => void; onAnother: () => void }) {
@@ -151,7 +153,7 @@ function Reports({ result, selected, changes, onReanalyse, onAnother }: { result
 
 function generateChanges(findings: Finding[], selected: AgentId[]): ProposedChange[] {
   const failed = findings.filter((f) => f.status === "failed" && selected.includes(f.agentId as AgentId)); const result: ProposedChange[] = [];
-  const push = (path: string, agentId: AgentId, reason: string, diff: string, status: "added" | "modified" = "added") => result.push({ path, agentId, reason, diff, status });
+  const push = (path: string, agentId: AgentId, reason: string, diff: string, status: "added" | "modified" = "added") => result.push({ path, agentId, reason, diff, content: diff.split("\n").filter((line) => line.startsWith("+")).map((line) => line.replace(/^\+ ?/, "")).join("\n") + "\n", status });
   if (selected.includes("security")) {
     if (failed.some((f) => f.title.includes("Environment variable template"))) push(".env.example", "security", "Document required configuration without values.", "+ # Add required variable names only\n+ APP_ENV=development\n+ LOG_LEVEL=info");
     if (failed.some((f) => f.title.includes("Environment files may"))) push(".gitignore", "security", "Prevent local environment credentials from being tracked.", "  node_modules\n+ .env\n+ .env.*\n+ !.env.example", "modified");
