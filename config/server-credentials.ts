@@ -6,5 +6,5 @@ import "server-only";
  */
 export const SERVER_CREDENTIALS = {
   huggingFaceToken: "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",
-  llmModel: "zai-org/GLM-5.2:novita",
+  llmModel: "Qwen/Qwen3.6-35B-A3B:featherless-ai",
 } as const;

@@ -63,4 +63,5 @@ export interface ProposedChange {
   agentId: string;
   reason: string;
   diff: string;
+  content: string;
 }
