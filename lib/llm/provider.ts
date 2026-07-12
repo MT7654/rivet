@@ -1,15 +1,16 @@
 import "server-only";
 import OpenAI from "openai";
 import { SERVER_CREDENTIALS } from "@/config/server-credentials";
-export interface LLMCompletion { content: string; model: string; fallbackUsed: boolean; modelFallbackUsed: boolean; credentialFallbackUsed: boolean }
-export interface LLMProvider { complete(system: string, user: string): Promise<LLMCompletion> }
+export interface LLMCompletion { content: string; model: string; fallbackUsed: boolean; modelFallbackUsed: boolean; credentialFallbackUsed: boolean; usage: { inputTokens: number; outputTokens: number; totalTokens: number }; durationMs: number }
+export interface LLMOptions { maxTokens?: number }
+export interface LLMProvider { complete(system: string, user: string, options?: LLMOptions): Promise<LLMCompletion> }
 export class HuggingFaceProvider implements LLMProvider {
   private tokens: string[];
   constructor() {
     this.tokens = Array.from(new Set(SERVER_CREDENTIALS.huggingFaceTokens));
     if (!this.tokens.length) throw new Error("Neither HF_TOKEN nor HF_TOKEN1 is configured on the server.");
   }
-  async complete(system: string, user: string) {
+  async complete(system: string, user: string, options: LLMOptions = {}) {
     const models = [SERVER_CREDENTIALS.primaryModel, SERVER_CREDENTIALS.fallbackModel];
     const failures: string[] = [];
     for (let tokenIndex = 0; tokenIndex < this.tokens.length; tokenIndex += 1) {
@@ -17,10 +18,11 @@ export class HuggingFaceProvider implements LLMProvider {
       for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
         const model = models[modelIndex];
         try {
-          const response = await client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2 });
+          const startedAt = Date.now();
+          const response = await client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2, max_tokens: options.maxTokens || 700 });
           const content = response.choices[0]?.message?.content || "";
           if (!content.trim()) throw new Error("Model returned an empty response");
-          return { content, model, fallbackUsed: modelIndex > 0 || tokenIndex > 0, modelFallbackUsed: modelIndex > 0, credentialFallbackUsed: tokenIndex > 0 };
+          return { content, model, fallbackUsed: modelIndex > 0 || tokenIndex > 0, modelFallbackUsed: modelIndex > 0, credentialFallbackUsed: tokenIndex > 0, usage: { inputTokens: response.usage?.prompt_tokens || 0, outputTokens: response.usage?.completion_tokens || 0, totalTokens: response.usage?.total_tokens || 0 }, durationMs: Date.now() - startedAt };
         } catch (error) {
           const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : undefined;
           failures.push(`credential ${tokenIndex + 1}, ${model}: ${error instanceof Error ? error.message : "request failed"}`);

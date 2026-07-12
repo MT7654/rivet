@@ -24,6 +24,7 @@ For demos and read-only sample repositories, **Preview demo result** shows the c
 ## Live behavior and boundaries
 
 - Live: public GitHub metadata, recursive tree ingestion, relevant-file filtering, deterministic checks, readiness scoring, evidence, technology detection, GLM 5.2 agent reports with Qwen 3.6 fallback, navigation, filters, generated remediation proposals, report export, and authorized draft pull-request creation.
+- Cost control: Fast Mode batches agents into one capped call, Balanced runs concise agents in parallel, Maximum Quality increases report depth, and session caching reuses unchanged reports without another model charge. Pre-run estimates use verified GLM pricing; post-run breakdowns use actual provider token counts and latency.
 - Optional: a GitHub token can be supplied for a single request to inspect private repositories or increase API limits. The token is not stored.
 - GitHub delivery: Rivet creates a branch and draft PR, displays the live GitHub diff, checks and reviews, records explicit Rivet human review, marks drafts ready, supports formal approval when the viewer is not the author, and offers guarded squash/rebase/merge actions. GitHub branch rules remain authoritative.
 - Boundary: dependency installation, lint, tests, and build validation require an isolated execution worker or target-repository GitHub Action. Rivet labels these checks as not run.
