@@ -19,6 +19,8 @@ Repository writes require an explicitly supplied fine-grained GitHub token. Rive
 
 On the Pull Request screen, users paste their own token beginning with `github_pat_`. The in-app guide links to GitHub's token creator and explains how to select the repository and grant Contents and Pull requests read/write access. The token is used for that request only and cleared after success.
 
+For demos and read-only sample repositories, **Preview demo result** shows the complete post-creation state without requiring a token or writing to GitHub. The simulated result is clearly labelled and includes the draft PR, branch, commit, files, and review status a user would see after a successful real run.
+
 ## Live behavior and boundaries
 
 - Live: public GitHub metadata, recursive tree ingestion, relevant-file filtering, deterministic checks, readiness scoring, evidence, technology detection, GLM 5.2 agent reports with Qwen 3.6 fallback, navigation, filters, generated remediation proposals, report export, and authorized draft pull-request creation.
