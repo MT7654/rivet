@@ -19,9 +19,13 @@ export class HuggingFaceProvider implements LLMProvider {
         const model = models[modelIndex];
         try {
           const startedAt = Date.now();
-          const response = await client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2, max_tokens: options.maxTokens || 700 });
-          const content = response.choices[0]?.message?.content || "";
-          if (!content.trim()) throw new Error("Model returned an empty response");
+          let response = await client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2, max_tokens: options.maxTokens || 700 });
+          let content = response.choices[0]?.message?.content || "";
+          if (!content.trim()) {
+            response = await client.chat.completions.create({ model, messages: [{ role: "system", content: `${system} Start the visible answer immediately and keep internal reasoning brief.` }, { role: "user", content: user }], temperature: .1, max_tokens: Math.min(1200, Math.max(900, options.maxTokens || 700)) });
+            content = response.choices[0]?.message?.content || "";
+          }
+          if (!content.trim()) throw new Error(`Model returned an empty response after retry (finish reason: ${response.choices[0]?.finish_reason || "unknown"})`);
           return { content, model, fallbackUsed: modelIndex > 0 || tokenIndex > 0, modelFallbackUsed: modelIndex > 0, credentialFallbackUsed: tokenIndex > 0, usage: { inputTokens: response.usage?.prompt_tokens || 0, outputTokens: response.usage?.completion_tokens || 0, totalTokens: response.usage?.total_tokens || 0 }, durationMs: Date.now() - startedAt };
         } catch (error) {
           const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : undefined;
