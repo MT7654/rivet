@@ -56,8 +56,8 @@ export default function Home() {
       try {
         const response = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: `Act as the ${agent.name} for ${result.repository.owner}/${result.repository.name}. Analyse only these evidence-backed findings and produce a concise remediation report with priorities, implementation guidance, risks, and validation steps. Do not claim that changes were applied or validated.\n\n${JSON.stringify(relevant.map(({ title, severity, explanation, remediation, file, evidence }) => ({ title, severity, explanation, remediation, file, evidence })))}` }) });
         const data = await response.json();
-        reports[id] = response.ok ? data.content : `Qwen report unavailable: ${data.error || "request failed"}`;
-      } catch { reports[id] = "Qwen report unavailable. Deterministic remediation proposals were still generated."; }
+        reports[id] = response.ok ? `[${data.fallbackUsed ? "Qwen 3.6 fallback" : "GLM 5.2 primary"}]\n\n${data.content}` : `Agent report unavailable: ${data.error || "request failed"}`;
+      } catch { reports[id] = "Agent report unavailable. Deterministic remediation proposals were still generated."; }
     }));
     setAgentReports(reports); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
   }
@@ -133,9 +133,9 @@ function Changes({ changes, reports, result, onAgents, onPR }: { changes: Propos
 
 function ReviewTab({ tab, result, changes, reports }: { tab: string; result: AnalysisResult; changes: ProposedChange[]; reports: Record<string, string> }) {
   if (tab === "Overview") return <div className="panel p-6"><h3>{changes.length} proposed files</h3><p className="text-zinc-500 text-sm mt-2">These proposals address {new Set(changes.map((c) => c.agentId)).size} specialist areas and could improve readiness from {result.score} to approximately {result.projectedScore}. No target repository files have been changed.</p></div>;
-  if (tab === "Agent Reports") return <div className="space-y-3">{agentCatalog.filter((a) => changes.some((c) => c.agentId === a.id)).map((a) => <div className="panel p-5" key={a.id}><div className="flex justify-between"><h3>{a.name}</h3><Badge>QWEN 3.6</Badge></div><p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">{reports[a.id] || "No model report returned."}</p></div>)}</div>;
+  if (tab === "Agent Reports") return <div className="space-y-3">{agentCatalog.filter((a) => changes.some((c) => c.agentId === a.id)).map((a) => <div className="panel p-5" key={a.id}><div className="flex justify-between"><h3>{a.name}</h3><Badge>AUTO LLM</Badge></div><p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">{reports[a.id] || "No model report returned."}</p></div>)}</div>;
   if (tab === "Validation") return <div className="panel p-6 space-y-4">{[["Generated-file syntax","Passed"],["Finding-to-change traceability","Passed"],["Dependency installation","Not run"],["Lint, tests, and build","Requires isolated runner"]].map(([name,status]) => <div className="flex justify-between text-sm border-b border-line pb-4" key={name}><span>{name}</span><span className={status === "Passed" ? "text-emerald-400" : "text-amber-300"}>{status}</span></div>)}</div>;
-  return <div className="panel p-6"><h3>Estimated usage</h3><p className="text-sm text-zinc-500 mt-2">Token estimates are planning values. Monetary cost is not shown because Qwen 3.6 provider pricing has not been verified.</p></div>;
+  return <div className="panel p-6"><h3>Estimated usage</h3><p className="text-sm text-zinc-500 mt-2">Token estimates are planning values. Monetary cost is not shown because provider pricing for GLM 5.2 and Qwen 3.6 has not been verified.</p></div>;
 }
 
 function PullRequest({ result, selected, changes, githubToken, setGithubToken }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[]; githubToken: string; setGithubToken: (value: string) => void }) {
