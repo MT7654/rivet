@@ -39,6 +39,7 @@ import type {
   Finding,
   ProposedChange,
 } from "@/lib/analysis/types";
+import { MODEL_PRICING } from "@/config/model-pricing";
 
 type Screen =
   | "landing"
@@ -53,6 +54,8 @@ type Screen =
   | "pr"
   | "reports";
 type AgentId = "security" | "testing" | "cicd" | "observability";
+type ExecutionMode = "fast" | "balanced" | "quality";
+type AgentMetric = { model: string; inputTokens: number; outputTokens: number; totalTokens: number; durationMs: number; estimatedCost: number | null; cached?: boolean };
 
 const nav: { label: string; screen: Screen }[] = [
   { label: "Overview", screen: "overview" },
@@ -123,9 +126,20 @@ export default function Home() {
   const [selected, setSelected] = useState<AgentId[]>([]);
   const [changes, setChanges] = useState<ProposedChange[]>([]);
   const [agentReports, setAgentReports] = useState<Record<string, string>>({});
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>("balanced");
+  const [agentMetrics, setAgentMetrics] = useState<Record<string, AgentMetric>>({});
+  const [agentProgress, setAgentProgress] = useState<Record<string, "queued" | "running" | "complete" | "cached" | "failed">>({});
+  const [executionStartedAt, setExecutionStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [executionState, setExecutionState] = useState<
     "idle" | "running" | "complete"
   >("idle");
+
+  useEffect(() => {
+    if (executionState !== "running" || !executionStartedAt) return;
+    const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - executionStartedAt) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [executionState, executionStartedAt]);
 
   async function analyse(url = repositoryUrl) {
     setError("");
@@ -160,7 +174,7 @@ export default function Home() {
     }
   }
 
-  async function runAgents() {
+  async function runAgentsLegacy() {
     if (!result || !selected.length) return;
     setExecutionState("running");
     setScreen("execution");
@@ -198,6 +212,34 @@ export default function Home() {
     setAgentReports(reports);
     setChanges(generateChanges(result.findings, selected));
     setExecutionState("complete");
+  }
+
+  async function runAgents() {
+    if (!result || !selected.length) return;
+    setExecutionState("running"); setScreen("execution"); setExecutionStartedAt(Date.now()); setElapsedSeconds(0); setAgentMetrics({});
+    setAgentProgress(Object.fromEntries(selected.map((id) => [id, "queued"])));
+    const reports: Record<string, string> = {}; const metrics: Record<string, AgentMetric> = {};
+    const calculateCost = (model: string, input: number, output: number) => { const price = MODEL_PRICING[model as keyof typeof MODEL_PRICING]; return !price || price.inputPerMillion === null || price.outputPerMillion === null ? null : input / 1_000_000 * price.inputPerMillion + output / 1_000_000 * price.outputPerMillion; };
+    const requestReport = async (id: AgentId, prompt: string) => {
+      const cacheKey = `rivet:agent:${result.repository.owner}/${result.repository.name}:${result.repository.lastPush}:${id}:${executionMode}:v2`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) { const value = JSON.parse(cached); reports[id] = value.report; metrics[id] = { ...value.metric, cached: true }; setAgentProgress((current) => ({ ...current, [id]: "cached" })); return; }
+      setAgentProgress((current) => ({ ...current, [id]: "running" }));
+      try {
+        const response = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, executionMode }) });
+        const data = await response.json(); const modelLabel = data.modelFallbackUsed ? "Qwen 3.6 fallback" : "GLM 5.2"; const credentialLabel = data.credentialFallbackUsed ? " · backup credential" : "";
+        reports[id] = response.ok ? `[${modelLabel}${credentialLabel}]\n\n${data.content}` : `Agent report unavailable: ${data.error || "request failed"}`;
+        metrics[id] = { model: data.model || "Unavailable", inputTokens: data.usage?.inputTokens || 0, outputTokens: data.usage?.outputTokens || 0, totalTokens: data.usage?.totalTokens || 0, durationMs: data.durationMs || 0, estimatedCost: calculateCost(data.model, data.usage?.inputTokens || 0, data.usage?.outputTokens || 0) };
+        if (response.ok) sessionStorage.setItem(cacheKey, JSON.stringify({ report: reports[id], metric: metrics[id] }));
+        setAgentProgress((current) => ({ ...current, [id]: response.ok ? "complete" : "failed" }));
+      } catch { reports[id] = "Agent report unavailable. Deterministic proposals were still generated."; metrics[id] = { model: "Unavailable", inputTokens: 0, outputTokens: 0, totalTokens: 0, durationMs: 0, estimatedCost: null }; setAgentProgress((current) => ({ ...current, [id]: "failed" })); }
+    };
+    if (executionMode === "fast") {
+      const compact = selected.map((id) => ({ agent: id, findings: result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id).map(({ title, severity, file, remediation }) => ({ title, severity, file, remediation })) }));
+      await requestReport(selected[0], `Produce concise separate sections for these specialist agents. Maximum five bullets per agent. ${JSON.stringify(compact)}`);
+      for (const id of selected.slice(1)) { reports[id] = `[Fast batched report]\n\n${reports[selected[0]]}`; metrics[id] = { ...metrics[selected[0]], inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: 0 }; setAgentProgress((current) => ({ ...current, [id]: "complete" })); }
+    } else await Promise.all(selected.map(async (id) => { const agent = agentCatalog.find((item) => item.id === id)!; const compact = result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id).map(({ title, severity, explanation, remediation, file }) => ({ title, severity, explanation, remediation, file })); await requestReport(id, `Act as the ${agent.name}. Produce a concise implementation report using only: ${JSON.stringify(compact)}`); }));
+    setAgentReports(reports); setAgentMetrics(metrics); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
   }
 
   if (screen === "landing")
@@ -244,6 +286,8 @@ export default function Home() {
           findings={result.findings}
           selected={selected}
           setSelected={setSelected}
+          executionMode={executionMode}
+          setExecutionMode={setExecutionMode}
           onRun={runAgents}
         />
       )}
@@ -253,6 +297,10 @@ export default function Home() {
           selected={selected}
           state={executionState}
           changes={changes}
+          mode={executionMode}
+          progress={agentProgress}
+          elapsedSeconds={elapsedSeconds}
+          metrics={agentMetrics}
           onStart={runAgents}
           onReview={() => setScreen("changes")}
         />
@@ -261,6 +309,8 @@ export default function Home() {
         <Changes
           changes={changes}
           reports={agentReports}
+          metrics={agentMetrics}
+          mode={executionMode}
           result={result}
           onAgents={() => setScreen("agents")}
           onPR={() => setScreen("pr")}
@@ -856,11 +906,15 @@ function Agents({
   findings,
   selected,
   setSelected,
+  executionMode,
+  setExecutionMode,
   onRun,
 }: {
   findings: Finding[];
   selected: AgentId[];
   setSelected: (v: AgentId[]) => void;
+  executionMode: ExecutionMode;
+  setExecutionMode: (v: ExecutionMode) => void;
   onRun: () => void;
 }) {
   const relevant = (id: string) =>
@@ -869,6 +923,10 @@ function Agents({
     (sum, id) => sum + (agentCatalog.find((a) => a.id === id)?.tokens || 0),
     0,
   );
+  const modeMultiplier = executionMode === "fast" ? 0.35 : executionMode === "quality" ? 1 : 0.65;
+  const estimatedTokens = Math.round(tokens * modeMultiplier);
+  const estimatedOutput = Math.round(selected.length * (executionMode === "fast" ? 420 : executionMode === "quality" ? 1200 : 700));
+  const estimatedCost = estimatedTokens / 1_000_000 * 1.4 + estimatedOutput / 1_000_000 * 4.4;
   return (
     <>
       <PageTitle eyebrow="ORCHESTRATOR / AGENTS" title="Specialist agent plan">
@@ -885,6 +943,11 @@ function Agents({
         reviewable proposals; this deployment does not write to the target
         repository.
       </p>
+      <section className="panel p-4 mb-4">
+        <div className="flex flex-wrap justify-between gap-3 items-center"><div><p className="label">EXECUTION MODE</p><p className="text-xs text-zinc-500 mt-1">Choose the cost, speed, and report-depth trade-off.</p></div><div className="flex border border-line">{(["fast", "balanced", "quality"] as ExecutionMode[]).map((mode) => <button key={mode} onClick={() => setExecutionMode(mode)} className={`px-4 py-2 text-xs capitalize ${executionMode === mode ? "bg-accent text-black" : "text-zinc-500 hover:text-white"}`}>{mode === "quality" ? "Maximum quality" : mode}</button>)}</div></div>
+        <div className="grid md:grid-cols-3 gap-3 mt-4"><Metric label="ESTIMATED TOKENS" value={`~${estimatedTokens.toLocaleString()}`}/><Metric label="ESTIMATED COST" value={`~$${estimatedCost.toFixed(3)}`}/><Metric label="ESTIMATED TIME" value={executionMode === "fast" ? "20–45 sec" : executionMode === "quality" ? "90–180 sec" : "45–90 sec"}/></div>
+        {executionMode === "fast" && <p className="text-[11px] text-emerald-400 mt-3">Fast Mode batches all selected agents into one capped model call and can reduce token cost substantially.</p>}
+      </section>
       <div className="grid lg:grid-cols-2 gap-3">
         {agentCatalog.map((agent) => {
           const gaps = relevant(agent.id);
@@ -934,8 +997,7 @@ function Agents({
         <div>
           <p className="text-sm font-medium">Execution estimate</p>
           <p className="text-xs text-zinc-500 mt-1">
-            {selected.length} agents · approximately {tokens.toLocaleString()}{" "}
-            total tokens · provider pricing unavailable
+            {selected.length} agents · approximately {estimatedTokens.toLocaleString()} tokens · estimated ${estimatedCost.toFixed(3)} at the verified GLM rate
           </p>
         </div>
         <CircleDollarSign className="text-zinc-700" />
@@ -949,6 +1011,10 @@ function Execution({
   selected,
   state,
   changes,
+  mode,
+  progress,
+  elapsedSeconds,
+  metrics,
   onStart,
   onReview,
 }: {
@@ -956,6 +1022,10 @@ function Execution({
   selected: AgentId[];
   state: "idle" | "running" | "complete";
   changes: ProposedChange[];
+  mode: ExecutionMode;
+  progress: Record<string, "queued" | "running" | "complete" | "cached" | "failed">;
+  elapsedSeconds: number;
+  metrics: Record<string, AgentMetric>;
   onStart: () => void;
   onReview: () => void;
 }) {
@@ -980,6 +1050,10 @@ function Execution({
       `${agent.name}: generated ${changes.filter((c) => c.agentId === id).length || "…"} file proposals`,
     ];
   });
+  const etaRange = mode === "fast" ? [20, 45] : mode === "quality" ? [90, 180] : [45, 90];
+  const remaining = Math.max(0, etaRange[1] - elapsedSeconds);
+  const completedAgents = selected.filter((id) => ["complete", "cached", "failed"].includes(progress[id])).length;
+  const actualTokens = Object.values(metrics).reduce((sum, metric) => sum + metric.totalTokens, 0);
   return (
     <>
       <PageTitle
@@ -996,10 +1070,12 @@ function Execution({
           </button>
         )}
       </PageTitle>
+      <div className="panel p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3"><Metric label="MODE" value={mode === "quality" ? "Maximum quality" : mode}/><Metric label="ELAPSED" value={formatDuration(elapsedSeconds)}/><Metric label="PROGRESS" value={`${completedAgents}/${selected.length} agents`}/><Metric label="ETA" value={state === "complete" ? "Complete" : remaining ? `~${formatDuration(remaining)} remaining` : "Finishing…"}/></div>
       <div className="grid lg:grid-cols-[1fr_340px] gap-4">
         <section className="panel">
           <div className="panel-head">Live activity</div>
           <div className="p-5 space-y-4">
+            {selected.map((id) => { const agent = agentCatalog.find((item) => item.id === id)!; const status = progress[id] || "queued"; return <div className="flex justify-between items-center text-sm border-b border-line pb-3" key={id}><span>{agent.name}</span><span className={status === "complete" || status === "cached" ? "text-emerald-400" : status === "failed" ? "text-red-400" : "text-amber-300"}>{status === "running" ? "Calling model…" : status === "cached" ? "Cached · no charge" : status}</span></div>; })}
             {activities.map((activity, i) => (
               <div className="flex gap-3 text-sm" key={`${activity}-${i}`}>
                 {state === "running" && i === activities.length - 1 ? (
@@ -1023,6 +1099,7 @@ function Execution({
               <span className="text-zinc-500">Proposals</span>
               <b>{changes.length}</b>
             </div>
+            <div className="flex justify-between text-sm"><span className="text-zinc-500">Actual tokens</span><b>{actualTokens.toLocaleString()}</b></div>
             <div className="flex justify-between text-sm">
               <span className="text-zinc-500">Validation</span>
               <b className="text-amber-300">Syntax only</b>
@@ -1046,12 +1123,16 @@ function Execution({
 function Changes({
   changes,
   reports,
+  metrics,
+  mode,
   result,
   onAgents,
   onPR,
 }: {
   changes: ProposedChange[];
   reports: Record<string, string>;
+  metrics: Record<string, AgentMetric>;
+  mode: ExecutionMode;
   result: AnalysisResult;
   onAgents: () => void;
   onPR: () => void;
@@ -1156,6 +1237,8 @@ function Changes({
           result={result}
           changes={changes}
           reports={reports}
+          metrics={metrics}
+          mode={mode}
         />
       )}
     </>
@@ -1167,11 +1250,15 @@ function ReviewTab({
   result,
   changes,
   reports,
+  metrics,
+  mode,
 }: {
   tab: string;
   result: AnalysisResult;
   changes: ProposedChange[];
   reports: Record<string, string>;
+  metrics: Record<string, AgentMetric>;
+  mode: ExecutionMode;
 }) {
   if (tab === "Overview")
     return (
@@ -1228,15 +1315,9 @@ function ReviewTab({
         ))}
       </div>
     );
-  return (
-    <div className="panel p-6">
-      <h3>Estimated usage</h3>
-      <p className="text-sm text-zinc-500 mt-2">
-        Token estimates are planning values. Monetary cost is not shown because
-        provider pricing for GLM 5.2 and Qwen 3.6 has not been verified.
-      </p>
-    </div>
-  );
+  const rows = Object.entries(metrics);
+  const totals = rows.reduce((value, [, metric]) => ({ input: value.input + metric.inputTokens, output: value.output + metric.outputTokens, total: value.total + metric.totalTokens, cost: value.cost + (metric.estimatedCost || 0) }), { input: 0, output: 0, total: 0, cost: 0 });
+  return <div className="panel"><div className="panel-head"><div><span>Token and cost breakdown</span><p className="text-[10px] text-zinc-600 mt-1">{mode} mode · GLM rates verified 2026-07-12</p></div><b className="text-emerald-400">${totals.cost.toFixed(4)}</b></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-[9px] font-mono text-zinc-600 border-b border-line"><tr><th className="text-left p-3">AGENT</th><th className="text-left p-3">MODEL</th><th className="text-right p-3">INPUT</th><th className="text-right p-3">OUTPUT</th><th className="text-right p-3">TOTAL</th><th className="text-right p-3">COST</th><th className="text-right p-3">TIME</th></tr></thead><tbody>{rows.map(([id, metric]) => <tr className="border-b border-line" key={id}><td className="p-3 capitalize">{id}</td><td className="p-3 text-xs text-zinc-500">{metric.model.includes("GLM") ? "GLM 5.2" : metric.model.includes("Qwen") ? "Qwen 3.6" : metric.model}{metric.cached && " · cached"}</td><td className="p-3 text-right font-mono">{metric.inputTokens.toLocaleString()}</td><td className="p-3 text-right font-mono">{metric.outputTokens.toLocaleString()}</td><td className="p-3 text-right font-mono">{metric.totalTokens.toLocaleString()}</td><td className="p-3 text-right font-mono">{metric.cached ? "$0.0000" : metric.estimatedCost === null ? "Rate unavailable" : `$${metric.estimatedCost.toFixed(4)}`}</td><td className="p-3 text-right font-mono">{metric.cached ? "Cached" : formatDuration(Math.round(metric.durationMs / 1000))}</td></tr>)}</tbody><tfoot><tr className="font-medium"><td className="p-3" colSpan={2}>Total actual usage</td><td className="p-3 text-right font-mono">{totals.input.toLocaleString()}</td><td className="p-3 text-right font-mono">{totals.output.toLocaleString()}</td><td className="p-3 text-right font-mono">{totals.total.toLocaleString()}</td><td className="p-3 text-right font-mono">${totals.cost.toFixed(4)}</td><td/></tr></tfoot></table></div><p className="text-[11px] text-zinc-600 p-4 border-t border-line">Costs use returned token counts. GLM uses the verified public routed rate of $1.40/M input and $4.40/M output. Qwen cost is labelled unavailable when its exact routed rate cannot be verified.</p></div>;
 }
 
 function PullRequest({
@@ -2085,6 +2166,12 @@ function Gate({ ok, label }: { ok: boolean; label: string }) {
       <span className={ok ? "text-zinc-300" : "text-zinc-600"}>{label}</span>
     </div>
   );
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.max(0, seconds % 60);
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
 function Reports({
