@@ -56,7 +56,9 @@ export default function Home() {
       try {
         const response = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: `Act as the ${agent.name} for ${result.repository.owner}/${result.repository.name}. Analyse only these evidence-backed findings and produce a concise remediation report with priorities, implementation guidance, risks, and validation steps. Do not claim that changes were applied or validated.\n\n${JSON.stringify(relevant.map(({ title, severity, explanation, remediation, file, evidence }) => ({ title, severity, explanation, remediation, file, evidence })))}` }) });
         const data = await response.json();
-        reports[id] = response.ok ? `[${data.fallbackUsed ? "Qwen 3.6 fallback" : "GLM 5.2 primary"}]\n\n${data.content}` : `Agent report unavailable: ${data.error || "request failed"}`;
+        const modelLabel = data.modelFallbackUsed ? "Qwen 3.6 model fallback" : "GLM 5.2 primary model";
+        const credentialLabel = data.credentialFallbackUsed ? " · HF_TOKEN1 backup credential" : " · HF_TOKEN primary credential";
+        reports[id] = response.ok ? `[${modelLabel}${credentialLabel}]\n\n${data.content}` : `Agent report unavailable: ${data.error || "request failed"}`;
       } catch { reports[id] = "Agent report unavailable. Deterministic remediation proposals were still generated."; }
     }));
     setAgentReports(reports); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
