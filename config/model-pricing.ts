@@ -1,0 +1,1 @@
+export const MODEL_PRICING={"zai-org/GLM-5.2:novita":{label:"GLM 5.2 via Hugging Face",inputPerMillion:null,outputPerMillion:null,note:"Pricing is not verified; Rivet does not show a monetary estimate."},demo:{label:"Demo estimator",inputPerMillion:0,outputPerMillion:0,note:"Simulated; no model calls."}} as const;
