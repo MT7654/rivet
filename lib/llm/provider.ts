@@ -1,26 +1,31 @@
 import "server-only";
 import OpenAI from "openai";
 import { SERVER_CREDENTIALS } from "@/config/server-credentials";
-export interface LLMCompletion { content: string; model: string; fallbackUsed: boolean }
+export interface LLMCompletion { content: string; model: string; fallbackUsed: boolean; modelFallbackUsed: boolean; credentialFallbackUsed: boolean }
 export interface LLMProvider { complete(system: string, user: string): Promise<LLMCompletion> }
 export class HuggingFaceProvider implements LLMProvider {
-  private client: OpenAI;
+  private tokens: string[];
   constructor() {
-    if (!SERVER_CREDENTIALS.huggingFaceToken) throw new Error("HF_TOKEN is not configured on the server.");
-    this.client = new OpenAI({ baseURL: "https://router.huggingface.co/v1", apiKey: SERVER_CREDENTIALS.huggingFaceToken });
+    this.tokens = Array.from(new Set(SERVER_CREDENTIALS.huggingFaceTokens));
+    if (!this.tokens.length) throw new Error("Neither HF_TOKEN nor HF_TOKEN1 is configured on the server.");
   }
   async complete(system: string, user: string) {
     const models = [SERVER_CREDENTIALS.primaryModel, SERVER_CREDENTIALS.fallbackModel];
     const failures: string[] = [];
-    for (let index = 0; index < models.length; index += 1) {
-      const model = models[index];
-      try {
-        const response = await this.client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2 });
-        const content = response.choices[0]?.message?.content || "";
-        if (!content.trim()) throw new Error("Model returned an empty response");
-        return { content, model, fallbackUsed: index > 0 };
-      } catch (error) {
-        failures.push(`${model}: ${error instanceof Error ? error.message : "request failed"}`);
+    for (let tokenIndex = 0; tokenIndex < this.tokens.length; tokenIndex += 1) {
+      const client = new OpenAI({ baseURL: "https://router.huggingface.co/v1", apiKey: this.tokens[tokenIndex] });
+      for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+        const model = models[modelIndex];
+        try {
+          const response = await client.chat.completions.create({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: .2 });
+          const content = response.choices[0]?.message?.content || "";
+          if (!content.trim()) throw new Error("Model returned an empty response");
+          return { content, model, fallbackUsed: modelIndex > 0 || tokenIndex > 0, modelFallbackUsed: modelIndex > 0, credentialFallbackUsed: tokenIndex > 0 };
+        } catch (error) {
+          const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: number }).status) : undefined;
+          failures.push(`credential ${tokenIndex + 1}, ${model}: ${error instanceof Error ? error.message : "request failed"}`);
+          if (status === 401 || status === 403) break;
+        }
       }
     }
     throw new Error(`All configured models failed. ${failures.join(" | ")}`);

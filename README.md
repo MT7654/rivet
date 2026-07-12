@@ -13,7 +13,7 @@ Open `http://localhost:3000`, choose **Analyse a repository**, and enter a publi
 
 ## Deployment configuration
 
-Set `HF_TOKEN` in Vercel for live agent reports. GLM 5.2 is attempted first; if it returns an error or empty response, Rivet automatically retries with Qwen 3.6. The provider configuration is protected by `server-only`, prompts are size-limited, and likely credentials are redacted.
+Set `HF_TOKEN` and `HF_TOKEN1` in Vercel for resilient live agent reports. Rivet attempts GLM 5.2 first and retries Qwen 3.6 for model failures. If the primary credential is rejected, the same model sequence is retried with `HF_TOKEN1`. Provider configuration is protected by `server-only`, prompts are size-limited, and likely credentials are redacted.
 
 Repository writes require an explicitly supplied fine-grained GitHub token. Rivet creates a separate branch and draft pull request; it never pushes to the default branch, merges, or deploys automatically.
 
