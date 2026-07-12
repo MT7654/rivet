@@ -1,22 +1,115 @@
 "use client";
 
 import Image from "next/image";
-import { cloneElement, isValidElement, useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, CircleDollarSign, Code2, Download, ExternalLink, FileCode2, FileSearch, Github, GitPullRequest, Loader2, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, TestTube2, Workflow, XCircle } from "lucide-react";
-import type { AnalysisResult, Finding, ProposedChange } from "@/lib/analysis/types";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  CircleDollarSign,
+  Code2,
+  Download,
+  ExternalLink,
+  FileCode2,
+  FileSearch,
+  Github,
+  GitPullRequest,
+  Loader2,
+  Play,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  TestTube2,
+  Workflow,
+  XCircle,
+} from "lucide-react";
+import type {
+  AnalysisResult,
+  Finding,
+  ProposedChange,
+} from "@/lib/analysis/types";
 
-type Screen = "landing" | "connect" | "analysing" | "overview" | "readiness" | "findings" | "agents" | "execution" | "changes" | "pr" | "reports";
+type Screen =
+  | "landing"
+  | "connect"
+  | "analysing"
+  | "overview"
+  | "readiness"
+  | "findings"
+  | "agents"
+  | "execution"
+  | "changes"
+  | "pr"
+  | "reports";
 type AgentId = "security" | "testing" | "cicd" | "observability";
 
 const nav: { label: string; screen: Screen }[] = [
-  { label: "Overview", screen: "overview" }, { label: "Readiness", screen: "readiness" }, { label: "Findings", screen: "findings" }, { label: "Agents", screen: "agents" }, { label: "Execution", screen: "execution" }, { label: "Changes", screen: "changes" }, { label: "Pull Request", screen: "pr" }, { label: "Reports", screen: "reports" },
+  { label: "Overview", screen: "overview" },
+  { label: "Readiness", screen: "readiness" },
+  { label: "Findings", screen: "findings" },
+  { label: "Agents", screen: "agents" },
+  { label: "Execution", screen: "execution" },
+  { label: "Changes", screen: "changes" },
+  { label: "Pull Request", screen: "pr" },
+  { label: "Reports", screen: "reports" },
 ];
 
 const agentCatalog = [
-  { id: "security" as const, name: "Security Agent", description: "Secrets, input validation, environment handling, and secure defaults.", icon: ShieldCheck, tokens: 18000, duration: "1–2 min", risk: "Medium", dependencies: [] },
-  { id: "testing" as const, name: "Testing Agent", description: "Meaningful unit tests, integration scaffolding, and test scripts.", icon: TestTube2, tokens: 24000, duration: "2–4 min", risk: "Low", dependencies: [] },
-  { id: "cicd" as const, name: "CI/CD Agent", description: "GitHub Actions quality gates for lint, types, tests, and builds.", icon: Workflow, tokens: 14000, duration: "1–2 min", risk: "Low", dependencies: ["testing"] },
-  { id: "observability" as const, name: "Observability Agent", description: "Structured logging, health checks, correlation IDs, and error context.", icon: Activity, tokens: 20000, duration: "1–3 min", risk: "Medium", dependencies: [] },
+  {
+    id: "security" as const,
+    name: "Security Agent",
+    description:
+      "Secrets, input validation, environment handling, and secure defaults.",
+    icon: ShieldCheck,
+    tokens: 18000,
+    duration: "1–2 min",
+    risk: "Medium",
+    dependencies: [],
+  },
+  {
+    id: "testing" as const,
+    name: "Testing Agent",
+    description:
+      "Meaningful unit tests, integration scaffolding, and test scripts.",
+    icon: TestTube2,
+    tokens: 24000,
+    duration: "2–4 min",
+    risk: "Low",
+    dependencies: [],
+  },
+  {
+    id: "cicd" as const,
+    name: "CI/CD Agent",
+    description:
+      "GitHub Actions quality gates for lint, types, tests, and builds.",
+    icon: Workflow,
+    tokens: 14000,
+    duration: "1–2 min",
+    risk: "Low",
+    dependencies: ["testing"],
+  },
+  {
+    id: "observability" as const,
+    name: "Observability Agent",
+    description:
+      "Structured logging, health checks, correlation IDs, and error context.",
+    icon: Activity,
+    tokens: 20000,
+    duration: "1–3 min",
+    risk: "Medium",
+    dependencies: [],
+  },
 ];
 
 export default function Home() {
@@ -30,190 +123,2312 @@ export default function Home() {
   const [selected, setSelected] = useState<AgentId[]>([]);
   const [changes, setChanges] = useState<ProposedChange[]>([]);
   const [agentReports, setAgentReports] = useState<Record<string, string>>({});
-  const [executionState, setExecutionState] = useState<"idle" | "running" | "complete">("idle");
+  const [executionState, setExecutionState] = useState<
+    "idle" | "running" | "complete"
+  >("idle");
 
   async function analyse(url = repositoryUrl) {
-    setError(""); setScreen("analysing"); setStage(0);
-    const ticker = window.setInterval(() => setStage((value) => Math.min(value + 1, 5)), 700);
+    setError("");
+    setScreen("analysing");
+    setStage(0);
+    const ticker = window.setInterval(
+      () => setStage((value) => Math.min(value + 1, 5)),
+      700,
+    );
     try {
-      const response = await fetch("/api/analyse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ repositoryUrl: url, branch: branch || undefined, githubToken: githubToken || undefined }) });
+      const response = await fetch("/api/analyse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repositoryUrl: url,
+          branch: branch || undefined,
+          githubToken: githubToken || undefined,
+        }),
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Analysis failed");
-      setResult(data); setSelected(recommendedAgents(data.findings)); setStage(6); setScreen("overview");
+      setResult(data);
+      setSelected(recommendedAgents(data.findings));
+      setStage(6);
+      setScreen("overview");
       localStorage.setItem("rivet:last-repository", url);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Analysis failed"); setScreen("connect");
-    } finally { window.clearInterval(ticker); }
+      setError(cause instanceof Error ? cause.message : "Analysis failed");
+      setScreen("connect");
+    } finally {
+      window.clearInterval(ticker);
+    }
   }
 
   async function runAgents() {
     if (!result || !selected.length) return;
-    setExecutionState("running"); setScreen("execution");
+    setExecutionState("running");
+    setScreen("execution");
     const reports: Record<string, string> = {};
-    await Promise.all(selected.map(async (id) => {
-      const agent = agentCatalog.find((item) => item.id === id)!;
-      const relevant = result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id);
-      try {
-        const response = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: `Act as the ${agent.name} for ${result.repository.owner}/${result.repository.name}. Analyse only these evidence-backed findings and produce a concise remediation report with priorities, implementation guidance, risks, and validation steps. Do not claim that changes were applied or validated.\n\n${JSON.stringify(relevant.map(({ title, severity, explanation, remediation, file, evidence }) => ({ title, severity, explanation, remediation, file, evidence })))}` }) });
-        const data = await response.json();
-        const modelLabel = data.modelFallbackUsed ? "Qwen 3.6 model fallback" : "GLM 5.2 primary model";
-        const credentialLabel = data.credentialFallbackUsed ? " · HF_TOKEN1 backup credential" : " · HF_TOKEN primary credential";
-        reports[id] = response.ok ? `[${modelLabel}${credentialLabel}]\n\n${data.content}` : `Agent report unavailable: ${data.error || "request failed"}`;
-      } catch { reports[id] = "Agent report unavailable. Deterministic remediation proposals were still generated."; }
-    }));
-    setAgentReports(reports); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
+    await Promise.all(
+      selected.map(async (id) => {
+        const agent = agentCatalog.find((item) => item.id === id)!;
+        const relevant = result.findings.filter(
+          (finding) => finding.status === "failed" && finding.agentId === id,
+        );
+        try {
+          const response = await fetch("/api/agents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: `Act as the ${agent.name} for ${result.repository.owner}/${result.repository.name}. Analyse only these evidence-backed findings and produce a concise remediation report with priorities, implementation guidance, risks, and validation steps. Do not claim that changes were applied or validated.\n\n${JSON.stringify(relevant.map(({ title, severity, explanation, remediation, file, evidence }) => ({ title, severity, explanation, remediation, file, evidence })))}`,
+            }),
+          });
+          const data = await response.json();
+          const modelLabel = data.modelFallbackUsed
+            ? "Qwen 3.6 model fallback"
+            : "GLM 5.2 primary model";
+          const credentialLabel = data.credentialFallbackUsed
+            ? " · HF_TOKEN1 backup credential"
+            : " · HF_TOKEN primary credential";
+          reports[id] = response.ok
+            ? `[${modelLabel}${credentialLabel}]\n\n${data.content}`
+            : `Agent report unavailable: ${data.error || "request failed"}`;
+        } catch {
+          reports[id] =
+            "Agent report unavailable. Deterministic remediation proposals were still generated.";
+        }
+      }),
+    );
+    setAgentReports(reports);
+    setChanges(generateChanges(result.findings, selected));
+    setExecutionState("complete");
   }
 
-  if (screen === "landing") return <Landing onAnalyse={() => setScreen("connect")} onDemo={() => { setRepositoryUrl("https://github.com/vercel/next.js"); analyse("https://github.com/vercel/next.js"); }} />;
-  if (screen === "connect") return <Connect repositoryUrl={repositoryUrl} setRepositoryUrl={setRepositoryUrl} branch={branch} setBranch={setBranch} token={githubToken} setToken={setGithubToken} error={error} onSubmit={() => analyse()} onBack={() => setScreen("landing")} />;
-  if (screen === "analysing") return <Analysing repository={repositoryUrl} stage={stage} />;
+  if (screen === "landing")
+    return (
+      <Landing
+        onAnalyse={() => setScreen("connect")}
+        onDemo={() => {
+          setRepositoryUrl("https://github.com/vercel/next.js");
+          analyse("https://github.com/vercel/next.js");
+        }}
+      />
+    );
+  if (screen === "connect")
+    return (
+      <Connect
+        repositoryUrl={repositoryUrl}
+        setRepositoryUrl={setRepositoryUrl}
+        branch={branch}
+        setBranch={setBranch}
+        token={githubToken}
+        setToken={setGithubToken}
+        error={error}
+        onSubmit={() => analyse()}
+        onBack={() => setScreen("landing")}
+      />
+    );
+  if (screen === "analysing")
+    return <Analysing repository={repositoryUrl} stage={stage} />;
   if (!result) return null;
 
-  return <AppShell screen={screen} setScreen={setScreen} result={result}>
-    {screen === "overview" && <Overview result={result} onFindings={() => setScreen("findings")} onAgents={() => setScreen("agents")} />}
-    {screen === "readiness" && <Readiness result={result} />}
-    {screen === "findings" && <Findings findings={result.findings} />}
-    {screen === "agents" && <Agents findings={result.findings} selected={selected} setSelected={setSelected} onRun={runAgents} />}
-    {screen === "execution" && <Execution result={result} selected={selected} state={executionState} changes={changes} onStart={runAgents} onReview={() => setScreen("changes")} />}
-    {screen === "changes" && <Changes changes={changes} reports={agentReports} result={result} onAgents={() => setScreen("agents")} onPR={() => setScreen("pr")} />}
-    {screen === "pr" && <PullRequest result={result} selected={selected} changes={changes} githubToken={githubToken} setGithubToken={setGithubToken} />}
-    {screen === "reports" && <Reports result={result} selected={selected} changes={changes} onReanalyse={() => analyse(result.repository.url)} onAnother={() => { setResult(null); setRepositoryUrl(""); setScreen("connect"); }} />}
-  </AppShell>;
+  return (
+    <AppShell screen={screen} setScreen={setScreen} result={result}>
+      {screen === "overview" && (
+        <Overview
+          result={result}
+          onFindings={() => setScreen("findings")}
+          onAgents={() => setScreen("agents")}
+        />
+      )}
+      {screen === "readiness" && <Readiness result={result} />}
+      {screen === "findings" && <Findings findings={result.findings} />}
+      {screen === "agents" && (
+        <Agents
+          findings={result.findings}
+          selected={selected}
+          setSelected={setSelected}
+          onRun={runAgents}
+        />
+      )}
+      {screen === "execution" && (
+        <Execution
+          result={result}
+          selected={selected}
+          state={executionState}
+          changes={changes}
+          onStart={runAgents}
+          onReview={() => setScreen("changes")}
+        />
+      )}
+      {screen === "changes" && (
+        <Changes
+          changes={changes}
+          reports={agentReports}
+          result={result}
+          onAgents={() => setScreen("agents")}
+          onPR={() => setScreen("pr")}
+        />
+      )}
+      {screen === "pr" && (
+        <PullRequest
+          result={result}
+          selected={selected}
+          changes={changes}
+          githubToken={githubToken}
+          setGithubToken={setGithubToken}
+        />
+      )}
+      {screen === "reports" && (
+        <Reports
+          result={result}
+          selected={selected}
+          changes={changes}
+          onReanalyse={() => analyse(result.repository.url)}
+          onAnother={() => {
+            setResult(null);
+            setRepositoryUrl("");
+            setScreen("connect");
+          }}
+        />
+      )}
+    </AppShell>
+  );
 }
 
-function Landing({ onAnalyse, onDemo }: { onAnalyse: () => void; onDemo: () => void }) {
-  return <main className="min-h-screen grid-bg"><header className="h-16 border-b border-line flex items-center justify-between px-6 md:px-12"><Brand/><button onClick={onDemo} className="text-sm border border-line px-4 py-2 hover:bg-white/5">Analyse sample repo</button></header><section className="max-w-6xl mx-auto px-6 pt-24 md:pt-36"><p className="eyebrow">ENGINEERING ORCHESTRATION / LIVE</p><h1 className="text-5xl md:text-7xl tracking-[-.05em] font-semibold max-w-3xl">From prototype<br/>to production.</h1><p className="mt-7 text-zinc-400 text-lg max-w-2xl leading-relaxed">Rivet inspects real GitHub repositories, identifies production gaps, coordinates specialist agents, and prepares reviewable remediations.</p><div className="flex flex-wrap gap-3 mt-9"><button onClick={onAnalyse} className="primary">Analyse a repository <ArrowRight size={16}/></button><button onClick={onDemo} className="secondary">Try a public sample</button></div><div className="mt-24 border border-line bg-panel/80"><div className="p-3 border-b border-line flex items-center gap-2"><span className="dot"/><span className="dot"/><span className="text-[11px] text-zinc-500 font-mono ml-3">live repository pipeline</span></div><div className="grid md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-line">{["Connect","Audit","Delegate","Validate","Review"].map((item, i) => <div className="p-6" key={item}><p className="font-mono text-[10px] text-zinc-600">0{i + 1}</p><p className="mt-2 text-sm">{item}</p></div>)}</div></div></section></main>;
+function Landing({
+  onAnalyse,
+  onDemo,
+}: {
+  onAnalyse: () => void;
+  onDemo: () => void;
+}) {
+  return (
+    <main className="min-h-screen grid-bg">
+      <header className="h-16 border-b border-line flex items-center justify-between px-6 md:px-12">
+        <Brand />
+        <button
+          onClick={onDemo}
+          className="text-sm border border-line px-4 py-2 hover:bg-white/5"
+        >
+          Analyse sample repo
+        </button>
+      </header>
+      <section className="max-w-6xl mx-auto px-6 pt-24 md:pt-36">
+        <p className="eyebrow">ENGINEERING ORCHESTRATION / LIVE</p>
+        <h1 className="text-5xl md:text-7xl tracking-[-.05em] font-semibold max-w-3xl">
+          From prototype
+          <br />
+          to production.
+        </h1>
+        <p className="mt-7 text-zinc-400 text-lg max-w-2xl leading-relaxed">
+          Rivet inspects real GitHub repositories, identifies production gaps,
+          coordinates specialist agents, and prepares reviewable remediations.
+        </p>
+        <div className="flex flex-wrap gap-3 mt-9">
+          <button onClick={onAnalyse} className="primary">
+            Analyse a repository <ArrowRight size={16} />
+          </button>
+          <button onClick={onDemo} className="secondary">
+            Try a public sample
+          </button>
+        </div>
+        <div className="mt-24 border border-line bg-panel/80">
+          <div className="p-3 border-b border-line flex items-center gap-2">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="text-[11px] text-zinc-500 font-mono ml-3">
+              live repository pipeline
+            </span>
+          </div>
+          <div className="grid md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-line">
+            {["Connect", "Audit", "Delegate", "Validate", "Review"].map(
+              (item, i) => (
+                <div className="p-6" key={item}>
+                  <p className="font-mono text-[10px] text-zinc-600">
+                    0{i + 1}
+                  </p>
+                  <p className="mt-2 text-sm">{item}</p>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-function Connect(props: { repositoryUrl: string; setRepositoryUrl: (v: string) => void; branch: string; setBranch: (v: string) => void; token: string; setToken: (v: string) => void; error: string; onSubmit: () => void; onBack: () => void }) {
-  return <main className="min-h-screen"><header className="h-16 border-b border-line px-6 flex items-center justify-between"><Brand/><Badge>LIVE MODE</Badge></header><div className="max-w-3xl mx-auto px-6 py-20"><button onClick={props.onBack} className="text-sm text-zinc-500 flex gap-2 items-center"><ArrowLeft size={15}/> Back</button><p className="eyebrow mt-12">REPOSITORY CONNECTION</p><h1 className="text-3xl mt-2">What should Rivet audit?</h1><p className="text-zinc-500 mt-3">Public repositories work without credentials. A token can be supplied temporarily for private repositories or higher API limits; it is never stored.</p>{props.error && <div className="mt-6 border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-300 flex gap-3"><AlertTriangle size={18}/>{props.error}</div>}<div className="border border-line bg-panel mt-8 p-6 space-y-5"><Field label="GitHub repository URL"><div className="relative"><Github size={17} className="absolute left-3 top-3 text-zinc-600"/><input autoFocus value={props.repositoryUrl} onChange={(e) => props.setRepositoryUrl(e.target.value)} placeholder="https://github.com/owner/repository" className="input pl-10"/></div></Field><div className="grid md:grid-cols-2 gap-4"><Field label="Branch (optional)"><input value={props.branch} onChange={(e) => props.setBranch(e.target.value)} placeholder="Default branch" className="input"/></Field><Field label="GitHub token (optional)"><input type="password" autoComplete="off" value={props.token} onChange={(e) => props.setToken(e.target.value)} placeholder="Used for this request only" className="input"/></Field></div><button disabled={!props.repositoryUrl.trim()} onClick={props.onSubmit} className="primary w-full justify-center disabled:opacity-40">Analyse repository <ArrowRight size={16}/></button></div><div className="grid md:grid-cols-3 gap-3 mt-5 text-xs text-zinc-500"><p>Up to 45 relevant text files</p><p>100 KB per-file limit</p><p>Secrets redacted from evidence</p></div></div></main>;
+function Connect(props: {
+  repositoryUrl: string;
+  setRepositoryUrl: (v: string) => void;
+  branch: string;
+  setBranch: (v: string) => void;
+  token: string;
+  setToken: (v: string) => void;
+  error: string;
+  onSubmit: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <main className="min-h-screen">
+      <header className="h-16 border-b border-line px-6 flex items-center justify-between">
+        <Brand />
+        <Badge>LIVE MODE</Badge>
+      </header>
+      <div className="max-w-3xl mx-auto px-6 py-20">
+        <button
+          onClick={props.onBack}
+          className="text-sm text-zinc-500 flex gap-2 items-center"
+        >
+          <ArrowLeft size={15} /> Back
+        </button>
+        <p className="eyebrow mt-12">REPOSITORY CONNECTION</p>
+        <h1 className="text-3xl mt-2">What should Rivet audit?</h1>
+        <p className="text-zinc-500 mt-3">
+          Public repositories work without credentials. A token can be supplied
+          temporarily for private repositories or higher API limits; it is never
+          stored.
+        </p>
+        {props.error && (
+          <div className="mt-6 border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-300 flex gap-3">
+            <AlertTriangle size={18} />
+            {props.error}
+          </div>
+        )}
+        <div className="border border-line bg-panel mt-8 p-6 space-y-5">
+          <Field label="GitHub repository URL">
+            <div className="relative">
+              <Github
+                size={17}
+                className="absolute left-3 top-3 text-zinc-600"
+              />
+              <input
+                autoFocus
+                value={props.repositoryUrl}
+                onChange={(e) => props.setRepositoryUrl(e.target.value)}
+                placeholder="https://github.com/owner/repository"
+                className="input pl-10"
+              />
+            </div>
+          </Field>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Field label="Branch (optional)">
+              <input
+                value={props.branch}
+                onChange={(e) => props.setBranch(e.target.value)}
+                placeholder="Default branch"
+                className="input"
+              />
+            </Field>
+            <Field label="GitHub token (optional)">
+              <input
+                type="password"
+                autoComplete="off"
+                value={props.token}
+                onChange={(e) => props.setToken(e.target.value)}
+                placeholder="Used for this request only"
+                className="input"
+              />
+            </Field>
+          </div>
+          <button
+            disabled={!props.repositoryUrl.trim()}
+            onClick={props.onSubmit}
+            className="primary w-full justify-center disabled:opacity-40"
+          >
+            Analyse repository <ArrowRight size={16} />
+          </button>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3 mt-5 text-xs text-zinc-500">
+          <p>Up to 45 relevant text files</p>
+          <p>100 KB per-file limit</p>
+          <p>Secrets redacted from evidence</p>
+        </div>
+      </div>
+    </main>
+  );
 }
 
-function Analysing({ repository, stage }: { repository: string; stage: number }) {
-  const stages = ["Connecting to GitHub", "Mapping repository tree", "Selecting relevant files", "Running deterministic checks", "Detecting technology stack", "Building readiness report"];
-  return <main className="min-h-screen flex flex-col"><header className="h-16 border-b border-line px-6 flex items-center justify-between"><Brand/><Badge>LIVE ANALYSIS</Badge></header><div className="m-auto w-full max-w-3xl px-6"><div className="flex justify-between items-end"><div><p className="eyebrow">REPOSITORY ANALYSIS</p><h1 className="text-3xl mt-3 truncate max-w-xl">{repository.replace("https://github.com/", "")}</h1></div><span className="font-mono text-4xl">{Math.min(96, (stage + 1) * 15)}%</span></div><div className="h-1 bg-zinc-800 mt-8"><div className="h-full bg-accent transition-all duration-500" style={{ width: `${Math.min(96, (stage + 1) * 15)}%` }}/></div><div className="grid md:grid-cols-2 gap-10 mt-10"><div className="space-y-4">{stages.map((item, i) => <div className={`flex gap-3 text-sm ${i <= stage ? "text-zinc-200" : "text-zinc-600"}`} key={item}>{i < stage ? <Check size={16} className="text-accent"/> : i === stage ? <Loader2 size={16} className="animate-spin text-accent"/> : <span className="w-4 h-4 border border-zinc-700"/>}{item}</div>)}</div><div className="code-panel"><p>provider <b>GitHub REST API</b></p><p>analysis <b>deterministic</b></p><p>context <b>filtered + limited</b></p><p>repository writes <b>disabled</b></p><p className="text-accent animate-pulse mt-5">● audit active</p></div></div></div></main>;
+function Analysing({
+  repository,
+  stage,
+}: {
+  repository: string;
+  stage: number;
+}) {
+  const stages = [
+    "Connecting to GitHub",
+    "Mapping repository tree",
+    "Selecting relevant files",
+    "Running deterministic checks",
+    "Detecting technology stack",
+    "Building readiness report",
+  ];
+  return (
+    <main className="min-h-screen flex flex-col">
+      <header className="h-16 border-b border-line px-6 flex items-center justify-between">
+        <Brand />
+        <Badge>LIVE ANALYSIS</Badge>
+      </header>
+      <div className="m-auto w-full max-w-3xl px-6">
+        <div className="flex justify-between items-end">
+          <div>
+            <p className="eyebrow">REPOSITORY ANALYSIS</p>
+            <h1 className="text-3xl mt-3 truncate max-w-xl">
+              {repository.replace("https://github.com/", "")}
+            </h1>
+          </div>
+          <span className="font-mono text-4xl">
+            {Math.min(96, (stage + 1) * 15)}%
+          </span>
+        </div>
+        <div className="h-1 bg-zinc-800 mt-8">
+          <div
+            className="h-full bg-accent transition-all duration-500"
+            style={{ width: `${Math.min(96, (stage + 1) * 15)}%` }}
+          />
+        </div>
+        <div className="grid md:grid-cols-2 gap-10 mt-10">
+          <div className="space-y-4">
+            {stages.map((item, i) => (
+              <div
+                className={`flex gap-3 text-sm ${i <= stage ? "text-zinc-200" : "text-zinc-600"}`}
+                key={item}
+              >
+                {i < stage ? (
+                  <Check size={16} className="text-accent" />
+                ) : i === stage ? (
+                  <Loader2 size={16} className="animate-spin text-accent" />
+                ) : (
+                  <span className="w-4 h-4 border border-zinc-700" />
+                )}
+                {item}
+              </div>
+            ))}
+          </div>
+          <div className="code-panel">
+            <p>
+              provider <b>GitHub REST API</b>
+            </p>
+            <p>
+              analysis <b>deterministic</b>
+            </p>
+            <p>
+              context <b>filtered + limited</b>
+            </p>
+            <p>
+              repository writes <b>disabled</b>
+            </p>
+            <p className="text-accent animate-pulse mt-5">● audit active</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
 }
 
-function AppShell({ screen, setScreen, result, children }: { screen: Screen; setScreen: (v: Screen) => void; result: AnalysisResult; children: React.ReactNode }) {
-  return <div className="min-h-screen grid md:grid-cols-[224px_1fr]"><aside className="border-r border-line p-5 hidden md:flex flex-col sticky top-0 h-screen"><Brand/><nav className="mt-10 space-y-1">{nav.map((item) => <button onClick={() => setScreen(item.screen)} className={`nav-item ${screen === item.screen ? "nav-active" : ""}`} key={item.screen}>{item.label}{item.screen === "findings" && <span className="ml-auto text-[10px] bg-white/5 px-1.5">{result.findings.filter((f) => f.status === "failed").length}</span>}</button>)}</nav><button onClick={() => setScreen("connect")} className="mt-auto text-left text-xs text-zinc-500 border-t border-line pt-4 hover:text-white">Analyse another repository</button></aside><main className="min-w-0"><header className="border-b border-line h-16 flex items-center justify-between px-6 sticky top-0 bg-ink/95 backdrop-blur z-10"><div className="min-w-0"><span className="text-sm font-medium">{result.repository.owner} / {result.repository.name}</span><span className="font-mono text-xs text-zinc-500 ml-3">{result.repository.branch}</span></div><div className="flex gap-3 items-center"><Badge>LIVE MODE</Badge><a href={result.repository.url} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-white"><ExternalLink size={16}/></a></div></header><div className="p-5 md:p-7 max-w-7xl mx-auto">{children}</div></main></div>;
+function AppShell({
+  screen,
+  setScreen,
+  result,
+  children,
+}: {
+  screen: Screen;
+  setScreen: (v: Screen) => void;
+  result: AnalysisResult;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-screen grid md:grid-cols-[224px_1fr]">
+      <aside className="border-r border-line p-5 hidden md:flex flex-col sticky top-0 h-screen">
+        <Brand />
+        <nav className="mt-10 space-y-1">
+          {nav.map((item) => (
+            <button
+              onClick={() => setScreen(item.screen)}
+              className={`nav-item ${screen === item.screen ? "nav-active" : ""}`}
+              key={item.screen}
+            >
+              {item.label}
+              {item.screen === "findings" && (
+                <span className="ml-auto text-[10px] bg-white/5 px-1.5">
+                  {result.findings.filter((f) => f.status === "failed").length}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <button
+          onClick={() => setScreen("connect")}
+          className="mt-auto text-left text-xs text-zinc-500 border-t border-line pt-4 hover:text-white"
+        >
+          Analyse another repository
+        </button>
+      </aside>
+      <main className="min-w-0">
+        <header className="border-b border-line h-16 flex items-center justify-between px-6 sticky top-0 bg-ink/95 backdrop-blur z-10">
+          <div className="min-w-0">
+            <span className="text-sm font-medium">
+              {result.repository.owner} / {result.repository.name}
+            </span>
+            <span className="font-mono text-xs text-zinc-500 ml-3">
+              {result.repository.branch}
+            </span>
+          </div>
+          <div className="flex gap-3 items-center">
+            <Badge>LIVE MODE</Badge>
+            <a
+              href={result.repository.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-zinc-500 hover:text-white"
+            >
+              <ExternalLink size={16} />
+            </a>
+          </div>
+        </header>
+        <div className="p-5 md:p-7 max-w-7xl mx-auto">{children}</div>
+      </main>
+    </div>
+  );
 }
 
-function Overview({ result, onFindings, onAgents }: { result: AnalysisResult; onFindings: () => void; onAgents: () => void }) {
+function Overview({
+  result,
+  onFindings,
+  onAgents,
+}: {
+  result: AnalysisResult;
+  onFindings: () => void;
+  onAgents: () => void;
+}) {
   const failed = result.findings.filter((f) => f.status === "failed");
-  return <><PageTitle eyebrow="READINESS / OVERVIEW" title="Production readiness"><button onClick={onAgents} className="primary">Review agent plan <ArrowRight size={16}/></button></PageTitle><div className="grid lg:grid-cols-[290px_1fr] gap-4"><section className="panel p-6"><Score score={result.score}/><p className="text-center mt-4">{result.label}</p><div className="mt-6 pt-5 border-t border-line flex justify-between text-sm"><span className="text-zinc-500">Projected</span><b className="text-emerald-400">{result.projectedScore} / 100</b></div></section><section className="panel p-6"><p className="label">EXECUTIVE SUMMARY</p><p className="text-zinc-300 leading-7 mt-3">{result.summary}</p><div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-7"><Metric label="CRITICAL" value={String(failed.filter((f) => f.severity === "critical").length)}/><Metric label="HIGH" value={String(failed.filter((f) => f.severity === "high").length)}/><Metric label="PASSED" value={String(result.findings.filter((f) => f.status === "passed").length)}/><Metric label="FILES SCANNED" value={String(result.repository.filesAnalysed)}/></div></section></div><div className="grid lg:grid-cols-[1fr_360px] gap-4 mt-4"><section className="panel"><div className="panel-head"><span>Priority findings</span><button onClick={onFindings} className="link">View all</button></div>{failed.slice(0, 6).map((finding) => <FindingRow finding={finding} key={finding.id}/>)}</section><section className="panel"><div className="panel-head">Detected stack</div>{result.technologies.map((tech) => <div className="px-4 py-3 border-b border-line last:border-0 flex justify-between text-sm" key={tech.name}><span className="text-zinc-500">{tech.name}</span><span>{tech.value} <small className="text-zinc-600 ml-2">{tech.confidence}%</small></span></div>)}</section></div></>;
+  return (
+    <>
+      <PageTitle eyebrow="READINESS / OVERVIEW" title="Production readiness">
+        <button onClick={onAgents} className="primary">
+          Review agent plan <ArrowRight size={16} />
+        </button>
+      </PageTitle>
+      <div className="grid lg:grid-cols-[290px_1fr] gap-4">
+        <section className="panel p-6">
+          <Score score={result.score} />
+          <p className="text-center mt-4">{result.label}</p>
+          <div className="mt-6 pt-5 border-t border-line flex justify-between text-sm">
+            <span className="text-zinc-500">Projected</span>
+            <b className="text-emerald-400">{result.projectedScore} / 100</b>
+          </div>
+        </section>
+        <section className="panel p-6">
+          <p className="label">EXECUTIVE SUMMARY</p>
+          <p className="text-zinc-300 leading-7 mt-3">{result.summary}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-7">
+            <Metric
+              label="CRITICAL"
+              value={String(
+                failed.filter((f) => f.severity === "critical").length,
+              )}
+            />
+            <Metric
+              label="HIGH"
+              value={String(failed.filter((f) => f.severity === "high").length)}
+            />
+            <Metric
+              label="PASSED"
+              value={String(
+                result.findings.filter((f) => f.status === "passed").length,
+              )}
+            />
+            <Metric
+              label="FILES SCANNED"
+              value={String(result.repository.filesAnalysed)}
+            />
+          </div>
+        </section>
+      </div>
+      <div className="grid lg:grid-cols-[1fr_360px] gap-4 mt-4">
+        <section className="panel">
+          <div className="panel-head">
+            <span>Priority findings</span>
+            <button onClick={onFindings} className="link">
+              View all
+            </button>
+          </div>
+          {failed.slice(0, 6).map((finding) => (
+            <FindingRow finding={finding} key={finding.id} />
+          ))}
+        </section>
+        <section className="panel">
+          <div className="panel-head">Detected stack</div>
+          {result.technologies.map((tech) => (
+            <div
+              className="px-4 py-3 border-b border-line last:border-0 flex justify-between text-sm"
+              key={tech.name}
+            >
+              <span className="text-zinc-500">{tech.name}</span>
+              <span>
+                {tech.value}{" "}
+                <small className="text-zinc-600 ml-2">{tech.confidence}%</small>
+              </span>
+            </div>
+          ))}
+        </section>
+      </div>
+    </>
+  );
 }
 
 function Readiness({ result }: { result: AnalysisResult }) {
-  const categories = useMemo(() => Array.from(new Set(result.findings.map((f) => f.category))), [result]);
-  return <><PageTitle eyebrow="READINESS / CHECKLIST" title="Assessment coverage"><span className="text-sm text-zinc-500">Analysed {new Date(result.analysedAt).toLocaleString()}</span></PageTitle><div className="grid lg:grid-cols-[300px_1fr] gap-4"><section className="panel p-6"><Score score={result.score}/><div className="mt-7 space-y-3">{["critical","high","medium","low"].map((severity) => <div className="flex justify-between text-sm" key={severity}><span className="capitalize text-zinc-500">{severity}</span><b>{result.findings.filter((f) => f.status === "failed" && f.severity === severity).length}</b></div>)}</div></section><div className="space-y-3">{categories.map((category) => { const checks = result.findings.filter((f) => f.category === category); const passed = checks.filter((f) => f.status === "passed").length; return <section className="panel p-5" key={category}><div className="flex items-center justify-between"><div><h3>{category}</h3><p className="text-xs text-zinc-500 mt-1">{passed} of {checks.length} checks passed</p></div><span className="font-mono text-sm">{Math.round(passed / checks.length * 100)}%</span></div><div className="h-1 bg-zinc-800 mt-4"><div className="h-full bg-accent" style={{ width: `${passed / checks.length * 100}%` }}/></div><div className="mt-4 space-y-2">{checks.map((check) => <div className="text-sm flex items-center gap-2" key={check.id}>{check.status === "passed" ? <CheckCircle2 size={15} className="text-emerald-400"/> : <XCircle size={15} className="text-red-400"/>}<span className={check.status === "passed" ? "text-zinc-500" : ""}>{check.title}</span></div>)}</div></section>; })}</div></div></>;
+  const categories = useMemo(
+    () => Array.from(new Set(result.findings.map((f) => f.category))),
+    [result],
+  );
+  return (
+    <>
+      <PageTitle eyebrow="READINESS / CHECKLIST" title="Assessment coverage">
+        <span className="text-sm text-zinc-500">
+          Analysed {new Date(result.analysedAt).toLocaleString()}
+        </span>
+      </PageTitle>
+      <div className="grid lg:grid-cols-[300px_1fr] gap-4">
+        <section className="panel p-6">
+          <Score score={result.score} />
+          <div className="mt-7 space-y-3">
+            {["critical", "high", "medium", "low"].map((severity) => (
+              <div className="flex justify-between text-sm" key={severity}>
+                <span className="capitalize text-zinc-500">{severity}</span>
+                <b>
+                  {
+                    result.findings.filter(
+                      (f) => f.status === "failed" && f.severity === severity,
+                    ).length
+                  }
+                </b>
+              </div>
+            ))}
+          </div>
+        </section>
+        <div className="space-y-3">
+          {categories.map((category) => {
+            const checks = result.findings.filter(
+              (f) => f.category === category,
+            );
+            const passed = checks.filter((f) => f.status === "passed").length;
+            return (
+              <section className="panel p-5" key={category}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3>{category}</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {passed} of {checks.length} checks passed
+                    </p>
+                  </div>
+                  <span className="font-mono text-sm">
+                    {Math.round((passed / checks.length) * 100)}%
+                  </span>
+                </div>
+                <div className="h-1 bg-zinc-800 mt-4">
+                  <div
+                    className="h-full bg-accent"
+                    style={{ width: `${(passed / checks.length) * 100}%` }}
+                  />
+                </div>
+                <div className="mt-4 space-y-2">
+                  {checks.map((check) => (
+                    <div
+                      className="text-sm flex items-center gap-2"
+                      key={check.id}
+                    >
+                      {check.status === "passed" ? (
+                        <CheckCircle2 size={15} className="text-emerald-400" />
+                      ) : (
+                        <XCircle size={15} className="text-red-400" />
+                      )}
+                      <span
+                        className={
+                          check.status === "passed" ? "text-zinc-500" : ""
+                        }
+                      >
+                        {check.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
 }
 
 function Findings({ findings }: { findings: Finding[] }) {
-  const [query, setQuery] = useState(""); const [severity, setSeverity] = useState("all"); const [expanded, setExpanded] = useState<string | null>(null);
-  const visible = findings.filter((finding) => (severity === "all" || finding.severity === severity) && `${finding.title} ${finding.category} ${finding.file}`.toLowerCase().includes(query.toLowerCase()));
-  return <><PageTitle eyebrow="AUDIT / FINDINGS" title="Repository findings"><span className="text-sm text-zinc-500">{visible.length} checks</span></PageTitle><div className="flex flex-wrap gap-3 mb-4"><div className="relative flex-1 min-w-60"><Search size={16} className="absolute left-3 top-3 text-zinc-600"/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search findings or files" className="input pl-9"/></div><select value={severity} onChange={(e) => setSeverity(e.target.value)} className="input w-40"><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div><div className="panel divide-y divide-line">{visible.map((finding) => <button className="w-full text-left" key={finding.id} onClick={() => setExpanded(expanded === finding.id ? null : finding.id)}><div className="grid md:grid-cols-[110px_1fr_260px_100px] gap-3 p-4 text-sm items-center"><Severity value={finding.severity} status={finding.status}/><span className="font-medium">{finding.title}</span><code className="text-xs text-zinc-500 truncate">{finding.file}</code><span className="text-xs text-zinc-500 capitalize">{finding.category}</span></div>{expanded === finding.id && <div className="border-t border-line p-5 bg-white/[.015] grid md:grid-cols-2 gap-6 text-sm"><div><p className="label">WHY IT MATTERS</p><p className="text-zinc-400 mt-2 leading-6">{finding.explanation}</p><p className="label mt-5">EVIDENCE</p><code className="block mt-2 text-xs text-amber-200 bg-black/30 p-3">{finding.evidence}</code></div><div><p className="label">REMEDIATION</p><p className="text-zinc-400 mt-2 leading-6">{finding.remediation}</p><div className="grid grid-cols-3 mt-5 gap-3"><Metric label="CONFIDENCE" value={`${finding.confidence}%`}/><Metric label="EFFORT" value={finding.effort}/><Metric label="AGENT" value={finding.agentId}/></div></div></div>}</button>)}</div></>;
+  const [query, setQuery] = useState("");
+  const [severity, setSeverity] = useState("all");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const visible = findings.filter(
+    (finding) =>
+      (severity === "all" || finding.severity === severity) &&
+      `${finding.title} ${finding.category} ${finding.file}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+  return (
+    <>
+      <PageTitle eyebrow="AUDIT / FINDINGS" title="Repository findings">
+        <span className="text-sm text-zinc-500">{visible.length} checks</span>
+      </PageTitle>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="relative flex-1 min-w-60">
+          <Search size={16} className="absolute left-3 top-3 text-zinc-600" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search findings or files"
+            className="input pl-9"
+          />
+        </div>
+        <select
+          value={severity}
+          onChange={(e) => setSeverity(e.target.value)}
+          className="input w-40"
+        >
+          <option value="all">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div className="panel divide-y divide-line">
+        {visible.map((finding) => (
+          <button
+            className="w-full text-left"
+            key={finding.id}
+            onClick={() =>
+              setExpanded(expanded === finding.id ? null : finding.id)
+            }
+          >
+            <div className="grid md:grid-cols-[110px_1fr_260px_100px] gap-3 p-4 text-sm items-center">
+              <Severity value={finding.severity} status={finding.status} />
+              <span className="font-medium">{finding.title}</span>
+              <code className="text-xs text-zinc-500 truncate">
+                {finding.file}
+              </code>
+              <span className="text-xs text-zinc-500 capitalize">
+                {finding.category}
+              </span>
+            </div>
+            {expanded === finding.id && (
+              <div className="border-t border-line p-5 bg-white/[.015] grid md:grid-cols-2 gap-6 text-sm">
+                <div>
+                  <p className="label">WHY IT MATTERS</p>
+                  <p className="text-zinc-400 mt-2 leading-6">
+                    {finding.explanation}
+                  </p>
+                  <p className="label mt-5">EVIDENCE</p>
+                  <code className="block mt-2 text-xs text-amber-200 bg-black/30 p-3">
+                    {finding.evidence}
+                  </code>
+                </div>
+                <div>
+                  <p className="label">REMEDIATION</p>
+                  <p className="text-zinc-400 mt-2 leading-6">
+                    {finding.remediation}
+                  </p>
+                  <div className="grid grid-cols-3 mt-5 gap-3">
+                    <Metric
+                      label="CONFIDENCE"
+                      value={`${finding.confidence}%`}
+                    />
+                    <Metric label="EFFORT" value={finding.effort} />
+                    <Metric label="AGENT" value={finding.agentId} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+    </>
+  );
 }
 
-function Agents({ findings, selected, setSelected, onRun }: { findings: Finding[]; selected: AgentId[]; setSelected: (v: AgentId[]) => void; onRun: () => void }) {
-  const relevant = (id: string) => findings.filter((f) => f.status === "failed" && f.agentId === id);
-  const tokens = selected.reduce((sum, id) => sum + (agentCatalog.find((a) => a.id === id)?.tokens || 0), 0);
-  return <><PageTitle eyebrow="ORCHESTRATOR / AGENTS" title="Specialist agent plan"><button disabled={!selected.length} onClick={onRun} className="primary disabled:opacity-40"><Play size={15}/> Execute selected agents</button></PageTitle><p className="text-zinc-500 text-sm -mt-5 mb-7 max-w-3xl">Agents are recommended from real findings. Generated remediations are reviewable proposals; this deployment does not write to the target repository.</p><div className="grid lg:grid-cols-2 gap-3">{agentCatalog.map((agent) => { const gaps = relevant(agent.id); const active = selected.includes(agent.id); return <button key={agent.id} onClick={() => setSelected(active ? selected.filter((id) => id !== agent.id) : [...selected, agent.id])} disabled={!gaps.length} className={`text-left panel p-5 ${active ? "border-accent bg-accent/[.025]" : ""} disabled:opacity-40`}><div className="flex justify-between"><agent.icon size={21}/><span className={`check ${active ? "checked" : ""}`}>{active && <Check size={12}/>}</span></div><h3 className="mt-4">{agent.name}</h3><p className="text-sm text-zinc-500 mt-2">{agent.description}</p><p className="text-xs text-amber-300 mt-4">{gaps.length} relevant production gap{gaps.length === 1 ? "" : "s"}</p><div className="grid grid-cols-4 gap-2 mt-5"><Mini label="TOKENS" value={`~${Math.round(agent.tokens / 1000)}k`}/><Mini label="DURATION" value={agent.duration}/><Mini label="RISK" value={agent.risk}/><Mini label="DEPENDS" value={agent.dependencies.join(", ") || "None"}/></div></button>; })}</div><div className="panel mt-4 p-5 flex flex-wrap justify-between items-center gap-3"><div><p className="text-sm font-medium">Execution estimate</p><p className="text-xs text-zinc-500 mt-1">{selected.length} agents · approximately {tokens.toLocaleString()} total tokens · provider pricing unavailable</p></div><CircleDollarSign className="text-zinc-700"/></div></>;
+function Agents({
+  findings,
+  selected,
+  setSelected,
+  onRun,
+}: {
+  findings: Finding[];
+  selected: AgentId[];
+  setSelected: (v: AgentId[]) => void;
+  onRun: () => void;
+}) {
+  const relevant = (id: string) =>
+    findings.filter((f) => f.status === "failed" && f.agentId === id);
+  const tokens = selected.reduce(
+    (sum, id) => sum + (agentCatalog.find((a) => a.id === id)?.tokens || 0),
+    0,
+  );
+  return (
+    <>
+      <PageTitle eyebrow="ORCHESTRATOR / AGENTS" title="Specialist agent plan">
+        <button
+          disabled={!selected.length}
+          onClick={onRun}
+          className="primary disabled:opacity-40"
+        >
+          <Play size={15} /> Execute selected agents
+        </button>
+      </PageTitle>
+      <p className="text-zinc-500 text-sm -mt-5 mb-7 max-w-3xl">
+        Agents are recommended from real findings. Generated remediations are
+        reviewable proposals; this deployment does not write to the target
+        repository.
+      </p>
+      <div className="grid lg:grid-cols-2 gap-3">
+        {agentCatalog.map((agent) => {
+          const gaps = relevant(agent.id);
+          const active = selected.includes(agent.id);
+          return (
+            <button
+              key={agent.id}
+              onClick={() =>
+                setSelected(
+                  active
+                    ? selected.filter((id) => id !== agent.id)
+                    : [...selected, agent.id],
+                )
+              }
+              disabled={!gaps.length}
+              className={`text-left panel p-5 ${active ? "border-accent bg-accent/[.025]" : ""} disabled:opacity-40`}
+            >
+              <div className="flex justify-between">
+                <agent.icon size={21} />
+                <span className={`check ${active ? "checked" : ""}`}>
+                  {active && <Check size={12} />}
+                </span>
+              </div>
+              <h3 className="mt-4">{agent.name}</h3>
+              <p className="text-sm text-zinc-500 mt-2">{agent.description}</p>
+              <p className="text-xs text-amber-300 mt-4">
+                {gaps.length} relevant production gap
+                {gaps.length === 1 ? "" : "s"}
+              </p>
+              <div className="grid grid-cols-4 gap-2 mt-5">
+                <Mini
+                  label="TOKENS"
+                  value={`~${Math.round(agent.tokens / 1000)}k`}
+                />
+                <Mini label="DURATION" value={agent.duration} />
+                <Mini label="RISK" value={agent.risk} />
+                <Mini
+                  label="DEPENDS"
+                  value={agent.dependencies.join(", ") || "None"}
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="panel mt-4 p-5 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <p className="text-sm font-medium">Execution estimate</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            {selected.length} agents · approximately {tokens.toLocaleString()}{" "}
+            total tokens · provider pricing unavailable
+          </p>
+        </div>
+        <CircleDollarSign className="text-zinc-700" />
+      </div>
+    </>
+  );
 }
 
-function Execution({ result, selected, state, changes, onStart, onReview }: { result: AnalysisResult; selected: AgentId[]; state: "idle" | "running" | "complete"; changes: ProposedChange[]; onStart: () => void; onReview: () => void }) {
-  if (state === "idle") return <Empty icon={Play} title="Execution has not started" body="Select relevant agents, review the estimates, and explicitly approve execution." action="Review agents" onAction={onStart}/>;
-  const activities = selected.flatMap((id) => { const agent = agentCatalog.find((a) => a.id === id)!; const count = result.findings.filter((f) => f.status === "failed" && f.agentId === id).length; return [`${agent.name}: received ${count} relevant findings`, `${agent.name}: prepared reviewable remediation plan`, `${agent.name}: generated ${changes.filter((c) => c.agentId === id).length || "…"} file proposals`]; });
-  return <><PageTitle eyebrow="ORCHESTRATOR / EXECUTION" title={state === "running" ? "Agents are preparing changes" : "Execution complete"}>{state === "complete" && <button onClick={onReview} className="primary">Review changes <ArrowRight size={16}/></button>}</PageTitle><div className="grid lg:grid-cols-[1fr_340px] gap-4"><section className="panel"><div className="panel-head">Live activity</div><div className="p-5 space-y-4">{activities.map((activity, i) => <div className="flex gap-3 text-sm" key={`${activity}-${i}`}>{state === "running" && i === activities.length - 1 ? <Loader2 size={16} className="animate-spin text-accent"/> : <CheckCircle2 size={16} className="text-emerald-400"/>}<span className="text-zinc-300">{activity}</span></div>)}</div></section><aside className="panel p-5"><p className="label">EXECUTION SUMMARY</p><div className="mt-4 space-y-4"><div className="flex justify-between text-sm"><span className="text-zinc-500">Agents</span><b>{selected.length}</b></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Proposals</span><b>{changes.length}</b></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Validation</span><b className="text-amber-300">Syntax only</b></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Repository writes</span><b>None</b></div></div><p className="text-xs text-zinc-600 mt-6 leading-5">Agent output is generated from repository findings. Runtime build and test validation requires an isolated worker or target-repository GitHub Action.</p></aside></div></>;
+function Execution({
+  result,
+  selected,
+  state,
+  changes,
+  onStart,
+  onReview,
+}: {
+  result: AnalysisResult;
+  selected: AgentId[];
+  state: "idle" | "running" | "complete";
+  changes: ProposedChange[];
+  onStart: () => void;
+  onReview: () => void;
+}) {
+  if (state === "idle")
+    return (
+      <Empty
+        icon={Play}
+        title="Execution has not started"
+        body="Select relevant agents, review the estimates, and explicitly approve execution."
+        action="Review agents"
+        onAction={onStart}
+      />
+    );
+  const activities = selected.flatMap((id) => {
+    const agent = agentCatalog.find((a) => a.id === id)!;
+    const count = result.findings.filter(
+      (f) => f.status === "failed" && f.agentId === id,
+    ).length;
+    return [
+      `${agent.name}: received ${count} relevant findings`,
+      `${agent.name}: prepared reviewable remediation plan`,
+      `${agent.name}: generated ${changes.filter((c) => c.agentId === id).length || "…"} file proposals`,
+    ];
+  });
+  return (
+    <>
+      <PageTitle
+        eyebrow="ORCHESTRATOR / EXECUTION"
+        title={
+          state === "running"
+            ? "Agents are preparing changes"
+            : "Execution complete"
+        }
+      >
+        {state === "complete" && (
+          <button onClick={onReview} className="primary">
+            Review changes <ArrowRight size={16} />
+          </button>
+        )}
+      </PageTitle>
+      <div className="grid lg:grid-cols-[1fr_340px] gap-4">
+        <section className="panel">
+          <div className="panel-head">Live activity</div>
+          <div className="p-5 space-y-4">
+            {activities.map((activity, i) => (
+              <div className="flex gap-3 text-sm" key={`${activity}-${i}`}>
+                {state === "running" && i === activities.length - 1 ? (
+                  <Loader2 size={16} className="animate-spin text-accent" />
+                ) : (
+                  <CheckCircle2 size={16} className="text-emerald-400" />
+                )}
+                <span className="text-zinc-300">{activity}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+        <aside className="panel p-5">
+          <p className="label">EXECUTION SUMMARY</p>
+          <div className="mt-4 space-y-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-500">Agents</span>
+              <b>{selected.length}</b>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-500">Proposals</span>
+              <b>{changes.length}</b>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-500">Validation</span>
+              <b className="text-amber-300">Syntax only</b>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-500">Repository writes</span>
+              <b>None</b>
+            </div>
+          </div>
+          <p className="text-xs text-zinc-600 mt-6 leading-5">
+            Agent output is generated from repository findings. Runtime build
+            and test validation requires an isolated worker or target-repository
+            GitHub Action.
+          </p>
+        </aside>
+      </div>
+    </>
+  );
 }
 
-function Changes({ changes, reports, result, onAgents, onPR }: { changes: ProposedChange[]; reports: Record<string, string>; result: AnalysisResult; onAgents: () => void; onPR: () => void }) {
-  const [active, setActive] = useState(0); const [tab, setTab] = useState("Files Changed");
-  if (!changes.length) return <Empty icon={FileCode2} title="No changes generated" body="Run at least one relevant specialist agent to prepare remediation proposals." action="Select agents" onAction={onAgents}/>;
+function Changes({
+  changes,
+  reports,
+  result,
+  onAgents,
+  onPR,
+}: {
+  changes: ProposedChange[];
+  reports: Record<string, string>;
+  result: AnalysisResult;
+  onAgents: () => void;
+  onPR: () => void;
+}) {
+  const [active, setActive] = useState(0);
+  const [tab, setTab] = useState("Files Changed");
+  if (!changes.length)
+    return (
+      <Empty
+        icon={FileCode2}
+        title="No changes generated"
+        body="Run at least one relevant specialist agent to prepare remediation proposals."
+        action="Select agents"
+        onAction={onAgents}
+      />
+    );
   const current = changes[active];
-  return <><PageTitle eyebrow="REVIEW / PROPOSED PATCH" title="Proposed code changes"><button onClick={onPR} className="primary">Prepare PR preview <ArrowRight size={16}/></button></PageTitle><div className="tabs">{["Overview","Files Changed","Agent Reports","Validation","Cost Breakdown"].map((item) => <button onClick={() => setTab(item)} className={tab === item ? "tab-active" : ""} key={item}>{item}</button>)}</div>{tab === "Files Changed" ? <div className="grid lg:grid-cols-[280px_1fr] panel min-h-[500px]"><aside className="border-r border-line p-3">{changes.map((change, i) => <button onClick={() => setActive(i)} className={`w-full text-left p-3 text-xs ${i === active ? "bg-white/5" : ""}`} key={`${change.path}-${i}`}><span className={change.status === "added" ? "text-emerald-400" : "text-amber-400"}>{change.status === "added" ? "A" : "M"}</span><span className="ml-3">{change.path}</span><p className="text-zinc-600 mt-1 ml-6">{change.agentId}</p></button>)}</aside><section className="min-w-0"><div className="panel-head"><code>{current.path}</code><span className="text-xs text-amber-300">Proposed · not applied</span></div><p className="px-5 py-3 text-xs text-zinc-500 border-b border-line">{current.reason}</p><pre className="text-xs font-mono overflow-auto p-4 leading-6">{current.diff.split("\n").map((line, i) => <div className={line.startsWith("+") ? "diff-add" : line.startsWith("-") ? "diff-remove" : ""} key={i}><span className="inline-block w-9 text-zinc-700">{i + 1}</span>{line}</div>)}</pre></section></div> : <ReviewTab tab={tab} result={result} changes={changes} reports={reports}/>}</>;
+  return (
+    <>
+      <PageTitle
+        eyebrow="REVIEW / PROPOSED PATCH"
+        title="Proposed code changes"
+      >
+        <button onClick={onPR} className="primary">
+          Prepare PR preview <ArrowRight size={16} />
+        </button>
+      </PageTitle>
+      <div className="tabs">
+        {[
+          "Overview",
+          "Files Changed",
+          "Agent Reports",
+          "Validation",
+          "Cost Breakdown",
+        ].map((item) => (
+          <button
+            onClick={() => setTab(item)}
+            className={tab === item ? "tab-active" : ""}
+            key={item}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+      {tab === "Files Changed" ? (
+        <div className="grid lg:grid-cols-[280px_1fr] panel min-h-[500px]">
+          <aside className="border-r border-line p-3">
+            {changes.map((change, i) => (
+              <button
+                onClick={() => setActive(i)}
+                className={`w-full text-left p-3 text-xs ${i === active ? "bg-white/5" : ""}`}
+                key={`${change.path}-${i}`}
+              >
+                <span
+                  className={
+                    change.status === "added"
+                      ? "text-emerald-400"
+                      : "text-amber-400"
+                  }
+                >
+                  {change.status === "added" ? "A" : "M"}
+                </span>
+                <span className="ml-3">{change.path}</span>
+                <p className="text-zinc-600 mt-1 ml-6">{change.agentId}</p>
+              </button>
+            ))}
+          </aside>
+          <section className="min-w-0">
+            <div className="panel-head">
+              <code>{current.path}</code>
+              <span className="text-xs text-amber-300">
+                Proposed · not applied
+              </span>
+            </div>
+            <p className="px-5 py-3 text-xs text-zinc-500 border-b border-line">
+              {current.reason}
+            </p>
+            <pre className="text-xs font-mono overflow-auto p-4 leading-6">
+              {current.diff.split("\n").map((line, i) => (
+                <div
+                  className={
+                    line.startsWith("+")
+                      ? "diff-add"
+                      : line.startsWith("-")
+                        ? "diff-remove"
+                        : ""
+                  }
+                  key={i}
+                >
+                  <span className="inline-block w-9 text-zinc-700">
+                    {i + 1}
+                  </span>
+                  {line}
+                </div>
+              ))}
+            </pre>
+          </section>
+        </div>
+      ) : (
+        <ReviewTab
+          tab={tab}
+          result={result}
+          changes={changes}
+          reports={reports}
+        />
+      )}
+    </>
+  );
 }
 
-function ReviewTab({ tab, result, changes, reports }: { tab: string; result: AnalysisResult; changes: ProposedChange[]; reports: Record<string, string> }) {
-  if (tab === "Overview") return <div className="panel p-6"><h3>{changes.length} proposed files</h3><p className="text-zinc-500 text-sm mt-2">These proposals address {new Set(changes.map((c) => c.agentId)).size} specialist areas and could improve readiness from {result.score} to approximately {result.projectedScore}. No target repository files have been changed.</p></div>;
-  if (tab === "Agent Reports") return <div className="space-y-3">{agentCatalog.filter((a) => changes.some((c) => c.agentId === a.id)).map((a) => <div className="panel p-5" key={a.id}><div className="flex justify-between"><h3>{a.name}</h3><Badge>AUTO LLM</Badge></div><p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">{reports[a.id] || "No model report returned."}</p></div>)}</div>;
-  if (tab === "Validation") return <div className="panel p-6 space-y-4">{[["Generated-file syntax","Passed"],["Finding-to-change traceability","Passed"],["Dependency installation","Not run"],["Lint, tests, and build","Requires isolated runner"]].map(([name,status]) => <div className="flex justify-between text-sm border-b border-line pb-4" key={name}><span>{name}</span><span className={status === "Passed" ? "text-emerald-400" : "text-amber-300"}>{status}</span></div>)}</div>;
-  return <div className="panel p-6"><h3>Estimated usage</h3><p className="text-sm text-zinc-500 mt-2">Token estimates are planning values. Monetary cost is not shown because provider pricing for GLM 5.2 and Qwen 3.6 has not been verified.</p></div>;
+function ReviewTab({
+  tab,
+  result,
+  changes,
+  reports,
+}: {
+  tab: string;
+  result: AnalysisResult;
+  changes: ProposedChange[];
+  reports: Record<string, string>;
+}) {
+  if (tab === "Overview")
+    return (
+      <div className="panel p-6">
+        <h3>{changes.length} proposed files</h3>
+        <p className="text-zinc-500 text-sm mt-2">
+          These proposals address {new Set(changes.map((c) => c.agentId)).size}{" "}
+          specialist areas and could improve readiness from {result.score} to
+          approximately {result.projectedScore}. No target repository files have
+          been changed.
+        </p>
+      </div>
+    );
+  if (tab === "Agent Reports")
+    return (
+      <div className="space-y-3">
+        {agentCatalog
+          .filter((a) => changes.some((c) => c.agentId === a.id))
+          .map((a) => (
+            <div className="panel p-5" key={a.id}>
+              <div className="flex justify-between">
+                <h3>{a.name}</h3>
+                <Badge>AUTO LLM</Badge>
+              </div>
+              <p className="text-sm text-zinc-400 mt-4 whitespace-pre-wrap leading-6">
+                {reports[a.id] || "No model report returned."}
+              </p>
+            </div>
+          ))}
+      </div>
+    );
+  if (tab === "Validation")
+    return (
+      <div className="panel p-6 space-y-4">
+        {[
+          ["Generated-file syntax", "Passed"],
+          ["Finding-to-change traceability", "Passed"],
+          ["Dependency installation", "Not run"],
+          ["Lint, tests, and build", "Requires isolated runner"],
+        ].map(([name, status]) => (
+          <div
+            className="flex justify-between text-sm border-b border-line pb-4"
+            key={name}
+          >
+            <span>{name}</span>
+            <span
+              className={
+                status === "Passed" ? "text-emerald-400" : "text-amber-300"
+              }
+            >
+              {status}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  return (
+    <div className="panel p-6">
+      <h3>Estimated usage</h3>
+      <p className="text-sm text-zinc-500 mt-2">
+        Token estimates are planning values. Monetary cost is not shown because
+        provider pricing for GLM 5.2 and Qwen 3.6 has not been verified.
+      </p>
+    </div>
+  );
 }
 
-function PullRequest({ result, selected, changes, githubToken, setGithubToken }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[]; githubToken: string; setGithubToken: (value: string) => void }) {
-  const [confirmed, setConfirmed] = useState(false); const [creating, setCreating] = useState(false); const [error, setError] = useState(""); const [created, setCreated] = useState<{ url: string; number: number; branch: string } | null>(null); const [demoPreview, setDemoPreview] = useState(false);
-  if (!changes.length) return <Empty icon={GitPullRequest} title="No pull request to prepare" body="Generate and review proposed changes first."/>;
+function PullRequest({
+  result,
+  selected,
+  changes,
+  githubToken,
+  setGithubToken,
+}: {
+  result: AnalysisResult;
+  selected: AgentId[];
+  changes: ProposedChange[];
+  githubToken: string;
+  setGithubToken: (value: string) => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState<{
+    url: string;
+    number: number;
+    branch: string;
+  } | null>(null);
+  const [demoPreview, setDemoPreview] = useState(false);
+  if (!changes.length)
+    return (
+      <Empty
+        icon={GitPullRequest}
+        title="No pull request to prepare"
+        body="Generate and review proposed changes first."
+      />
+    );
   const description = `## Summary\n\nRivet prepared production-readiness improvements for ${result.repository.owner}/${result.repository.name}.\n\n## Agents activated\n\n${selected.map((id) => `- ${agentCatalog.find((a) => a.id === id)?.name}`).join("\n")}\n\n## Files proposed\n\n${changes.map((c) => `- \`${c.path}\` — ${c.reason}`).join("\n")}\n\n## Validation\n\nGenerated-file syntax and traceability checks completed. Install, lint, test, and build validation must run in the target repository.\n\n## Human review\n\nReview every hunk before creating a branch or draft pull request. Rivet has not written to the repository.`;
-  async function createDraftPR() { setCreating(true); setError(""); try { const response = await fetch("/api/github/draft-pr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ repositoryUrl: result.repository.url, baseBranch: result.repository.branch, githubToken, changes, title: "Rivet: Production-readiness improvements", description }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Draft pull request creation failed"); setCreated(data); } catch (cause) { setError(cause instanceof Error ? cause.message : "Draft pull request creation failed"); } finally { setCreating(false); } }
-  if ([created].some(Boolean)) return <PullRequestWorkspace result={result} created={created!} githubToken={githubToken} setGithubToken={setGithubToken}/>;
-  if (demoPreview) return <DemoPullRequestWorkspace result={result} changes={changes} onExit={() => setDemoPreview(false)}/>;
-  if (demoPreview) return <><PageTitle eyebrow="GITHUB / DRAFT PR" title="Draft pull request created"><Badge>DEMO RESULT</Badge></PageTitle><div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 flex gap-3 text-sm"><AlertTriangle size={18} className="text-amber-300 shrink-0"/><div><p className="text-amber-200">Sample result only — no GitHub write occurred.</p><p className="text-zinc-500 text-xs mt-1">This is what Rivet displays after successfully creating a real draft pull request.</p></div></div><div className="grid lg:grid-cols-[1fr_330px] gap-4"><section className="panel"><div className="panel-head"><div><span className="font-medium">Rivet: Production-readiness improvements</span><span className="text-zinc-600 ml-2">#42</span></div><Badge>DRAFT</Badge></div><div className="p-6"><div className="flex flex-wrap gap-2 items-center text-xs"><code className="bg-white/5 border border-line px-2 py-1">{result.repository.owner}:rivet/readiness-demo</code><ArrowRight size={14} className="text-zinc-600"/><code className="bg-white/5 border border-line px-2 py-1">{result.repository.owner}:{result.repository.branch}</code></div><div className="grid md:grid-cols-3 gap-3 mt-6"><Metric label="FILES CHANGED" value={String(changes.length)}/><Metric label="COMMIT" value="demo7f3"/><Metric label="STATUS" value="Draft"/></div><div className="mt-7 space-y-4 text-sm"><div className="flex gap-3"><CheckCircle2 size={17} className="text-emerald-400"/><span>Branch created from <code>{result.repository.branch}</code></span></div><div className="flex gap-3"><CheckCircle2 size={17} className="text-emerald-400"/><span>{changes.length} approved file proposal{changes.length === 1 ? "" : "s"} committed</span></div><div className="flex gap-3"><CheckCircle2 size={17} className="text-emerald-400"/><span>Draft pull request opened for human review</span></div><div className="flex gap-3"><AlertTriangle size={17} className="text-amber-300"/><span className="text-zinc-500">Merge and deployment remain disabled until a reviewer approves the PR</span></div></div><div className="border-t border-line mt-7 pt-5"><p className="label">FILES IN THIS DRAFT</p>{changes.map((change) => <div className="flex justify-between text-xs mt-3" key={change.path}><code>{change.path}</code><span className="text-zinc-600 capitalize">{change.status}</span></div>)}</div></div></section><aside className="panel p-5 h-fit"><p className="label">DEMO COMPLETE</p><h3 className="mt-2">This is the end result</h3><p className="text-xs text-zinc-500 mt-2 leading-5">A real run would provide an “Open draft PR” link to GitHub. The branch, commit, and PR would exist in the repository selected by the user.</p><button onClick={() => setDemoPreview(false)} className="secondary w-full justify-center mt-5">Return to real PR setup</button></aside></div></>;
-  return <><PageTitle eyebrow="GITHUB / DRAFT PR" title="Rivet: Production-readiness improvements"><Badge>{created ? "CREATED" : "PREVIEW"}</Badge></PageTitle><div className="grid lg:grid-cols-[1fr_330px] gap-4"><article className="panel p-7 prose-rivet"><pre className="whitespace-pre-wrap font-sans text-sm text-zinc-400 leading-7">{description}</pre></article><aside className="panel p-5 h-fit"><Metric label="READINESS" value={`${result.score} → ${result.projectedScore}`}/><Metric label="FILES" value={String(changes.length)}/><Metric label="AGENTS" value={String(selected.length)}/><button onClick={() => navigator.clipboard.writeText(description)} className="secondary w-full justify-center mt-5">Copy PR description</button>{created ? <a href={created.url} target="_blank" rel="noreferrer" className="primary w-full justify-center mt-2">Open draft PR #{created.number} <ExternalLink size={15}/></a> : <><div className="border border-amber-400/25 bg-amber-400/[.035] p-3 mt-4"><div className="flex gap-2 items-start"><span title="Use this when you do not want to authorize GitHub writes" className="w-4 h-4 rounded-full border border-amber-300 text-amber-300 text-[10px] grid place-items-center shrink-0">i</span><p className="text-[11px] text-zinc-400 leading-5">No token? Preview the successful end result for a demo or sample repository. This performs no GitHub write.</p></div><button onClick={() => setDemoPreview(true)} className="secondary w-full justify-center mt-3 border-amber-400/30 text-amber-200"><Play size={14}/> Preview demo result</button></div><div className="flex items-center gap-3 my-4"><span className="h-px bg-line flex-1"/><span className="text-[9px] font-mono text-zinc-700">OR CREATE FOR REAL</span><span className="h-px bg-line flex-1"/></div><Field label="Fine-grained GitHub token"><input type="password" autoComplete="off" value={githubToken} onChange={(event) => setGithubToken(event.target.value)} placeholder="Contents + Pull requests: Read and write" className="input mt-2"/></Field><label className="flex gap-2 items-start text-xs text-zinc-500 mt-4"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5"/><span>Create a new branch from <code>{result.repository.branch}</code>, commit these {changes.length} proposed files, and open a draft pull request. Do not merge.</span></label><button disabled={!githubToken.trim() || !confirmed || creating} onClick={createDraftPR} className="primary w-full justify-center mt-4 disabled:opacity-40">{creating ? <Loader2 size={15} className="animate-spin"/> : <GitPullRequest size={15}/>} Create draft pull request</button></>}{error && <p className="text-xs text-red-300 mt-3 leading-5">{error}</p>}<p className="text-[11px] text-zinc-600 mt-4 leading-5">The token is sent only to Rivet’s server for this action, is never logged or persisted, and is cleared after success. Rivet never writes to the default branch or merges automatically.</p></aside></div></>;
+  async function createDraftPR() {
+    setCreating(true);
+    setError("");
+    try {
+      const response = await fetch("/api/github/draft-pr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repositoryUrl: result.repository.url,
+          baseBranch: result.repository.branch,
+          githubToken,
+          changes,
+          title: "Rivet: Production-readiness improvements",
+          description,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.error || "Draft pull request creation failed");
+      setCreated(data);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Draft pull request creation failed",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+  if ([created].some(Boolean))
+    return (
+      <PullRequestWorkspace
+        result={result}
+        created={created!}
+        githubToken={githubToken}
+        setGithubToken={setGithubToken}
+      />
+    );
+  if (demoPreview)
+    return (
+      <DemoPullRequestWorkspace
+        result={result}
+        changes={changes}
+        onExit={() => setDemoPreview(false)}
+      />
+    );
+  if (demoPreview)
+    return (
+      <>
+        <PageTitle
+          eyebrow="GITHUB / DRAFT PR"
+          title="Draft pull request created"
+        >
+          <Badge>DEMO RESULT</Badge>
+        </PageTitle>
+        <div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 flex gap-3 text-sm">
+          <AlertTriangle size={18} className="text-amber-300 shrink-0" />
+          <div>
+            <p className="text-amber-200">
+              Sample result only — no GitHub write occurred.
+            </p>
+            <p className="text-zinc-500 text-xs mt-1">
+              This is what Rivet displays after successfully creating a real
+              draft pull request.
+            </p>
+          </div>
+        </div>
+        <div className="grid lg:grid-cols-[1fr_330px] gap-4">
+          <section className="panel">
+            <div className="panel-head">
+              <div>
+                <span className="font-medium">
+                  Rivet: Production-readiness improvements
+                </span>
+                <span className="text-zinc-600 ml-2">#42</span>
+              </div>
+              <Badge>DRAFT</Badge>
+            </div>
+            <div className="p-6">
+              <div className="flex flex-wrap gap-2 items-center text-xs">
+                <code className="bg-white/5 border border-line px-2 py-1">
+                  {result.repository.owner}:rivet/readiness-demo
+                </code>
+                <ArrowRight size={14} className="text-zinc-600" />
+                <code className="bg-white/5 border border-line px-2 py-1">
+                  {result.repository.owner}:{result.repository.branch}
+                </code>
+              </div>
+              <div className="grid md:grid-cols-3 gap-3 mt-6">
+                <Metric label="FILES CHANGED" value={String(changes.length)} />
+                <Metric label="COMMIT" value="demo7f3" />
+                <Metric label="STATUS" value="Draft" />
+              </div>
+              <div className="mt-7 space-y-4 text-sm">
+                <div className="flex gap-3">
+                  <CheckCircle2 size={17} className="text-emerald-400" />
+                  <span>
+                    Branch created from <code>{result.repository.branch}</code>
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <CheckCircle2 size={17} className="text-emerald-400" />
+                  <span>
+                    {changes.length} approved file proposal
+                    {changes.length === 1 ? "" : "s"} committed
+                  </span>
+                </div>
+                <div className="flex gap-3">
+                  <CheckCircle2 size={17} className="text-emerald-400" />
+                  <span>Draft pull request opened for human review</span>
+                </div>
+                <div className="flex gap-3">
+                  <AlertTriangle size={17} className="text-amber-300" />
+                  <span className="text-zinc-500">
+                    Merge and deployment remain disabled until a reviewer
+                    approves the PR
+                  </span>
+                </div>
+              </div>
+              <div className="border-t border-line mt-7 pt-5">
+                <p className="label">FILES IN THIS DRAFT</p>
+                {changes.map((change) => (
+                  <div
+                    className="flex justify-between text-xs mt-3"
+                    key={change.path}
+                  >
+                    <code>{change.path}</code>
+                    <span className="text-zinc-600 capitalize">
+                      {change.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+          <aside className="panel p-5 h-fit">
+            <p className="label">DEMO COMPLETE</p>
+            <h3 className="mt-2">This is the end result</h3>
+            <p className="text-xs text-zinc-500 mt-2 leading-5">
+              A real run would provide an “Open draft PR” link to GitHub. The
+              branch, commit, and PR would exist in the repository selected by
+              the user.
+            </p>
+            <button
+              onClick={() => setDemoPreview(false)}
+              className="secondary w-full justify-center mt-5"
+            >
+              Return to real PR setup
+            </button>
+          </aside>
+        </div>
+      </>
+    );
+  return (
+    <>
+      <PageTitle
+        eyebrow="GITHUB / DRAFT PR"
+        title="Rivet: Production-readiness improvements"
+      >
+        <Badge>{created ? "CREATED" : "PREVIEW"}</Badge>
+      </PageTitle>
+      <section className="panel mb-4 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-line">
+        <div className="px-5 py-4">
+          <p className="label">READINESS</p>
+          <p className="text-xl mt-1">{result.score} <span className="text-zinc-600">→</span> <span className="text-emerald-400">{result.projectedScore}</span></p>
+        </div>
+        <div className="px-5 py-4"><p className="label">FILES</p><p className="text-xl mt-1">{changes.length}</p></div>
+        <div className="px-5 py-4"><p className="label">AGENTS</p><p className="text-xl mt-1">{selected.length}</p></div>
+      </section>
+      <div className="grid lg:grid-cols-[1fr_330px] gap-4">
+        <article className="panel p-7 prose-rivet">
+          <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-400 leading-7">
+            {description}
+          </pre>
+        </article>
+        <aside className="panel p-5 h-fit pr-actions">
+          <Metric
+            label="READINESS"
+            value={`${result.score} → ${result.projectedScore}`}
+          />
+          <button
+            onClick={() => navigator.clipboard.writeText(description)}
+            className="secondary w-full justify-center"
+          >
+            Copy PR description
+          </button>
+          {created ? (
+            <a
+              href={created.url}
+              target="_blank"
+              rel="noreferrer"
+              className="primary w-full justify-center mt-2"
+            >
+              Open draft PR #{created.number} <ExternalLink size={15} />
+            </a>
+          ) : (
+            <>
+              <div className="border border-amber-400/25 bg-amber-400/[.035] p-3 mt-4">
+                <div className="flex gap-2 items-start">
+                  <span
+                    title="Use this when you do not want to authorize GitHub writes"
+                    className="w-4 h-4 rounded-full border border-amber-300 text-amber-300 text-[10px] grid place-items-center shrink-0"
+                  >
+                    i
+                  </span>
+                  <p className="text-[11px] text-zinc-400 leading-5">
+                    No token? Preview the successful end result for a demo or
+                    sample repository. This performs no GitHub write.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDemoPreview(true)}
+                  className="secondary w-full justify-center mt-3 border-amber-400/30 text-amber-200"
+                >
+                  <Play size={14} /> Preview demo result
+                </button>
+              </div>
+              <div className="flex items-center gap-3 my-4">
+                <span className="h-px bg-line flex-1" />
+                <span className="text-[9px] font-mono text-zinc-700">
+                  OR CREATE FOR REAL
+                </span>
+                <span className="h-px bg-line flex-1" />
+              </div>
+              <Field label="Fine-grained GitHub token">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={githubToken}
+                  onChange={(event) => setGithubToken(event.target.value)}
+                  placeholder="Contents + Pull requests: Read and write"
+                  className="input mt-2"
+                />
+              </Field>
+              <label className="flex gap-2 items-start text-xs text-zinc-500 mt-4">
+                <input
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Create a new branch from{" "}
+                  <code>{result.repository.branch}</code>, commit these{" "}
+                  {changes.length} proposed files, and open a draft pull
+                  request. Do not merge.
+                </span>
+              </label>
+              <button
+                disabled={!githubToken.trim() || !confirmed || creating}
+                onClick={createDraftPR}
+                className="primary w-full justify-center mt-4 disabled:opacity-40"
+              >
+                {creating ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <GitPullRequest size={15} />
+                )}{" "}
+                Create draft pull request
+              </button>
+            </>
+          )}
+          {error && (
+            <p className="text-xs text-red-300 mt-3 leading-5">{error}</p>
+          )}
+          <p className="text-[11px] text-zinc-600 mt-4 leading-5">
+            The token is sent only to Rivet’s server for this action, is never
+            logged or persisted, and is cleared after success. Rivet never
+            writes to the default branch or merges automatically.
+          </p>
+        </aside>
+      </div>
+    </>
+  );
 }
 
 type PRWorkspaceData = {
-  pull: { number: number; title: string; url: string; draft: boolean; state: string; merged: boolean; mergeable: boolean | null; mergeableState: string; additions: number; deletions: number; changedFiles: number; commits: number; author: string; head: string; headSha: string; base: string };
-  files: { filename: string; status: string; additions: number; deletions: number; changes: number; patch: string }[];
-  reviews: { id: number; user: string; state: string; body: string; submittedAt: string }[];
-  checks: { name: string; status: string; conclusion: string | null; url: string }[];
+  pull: {
+    number: number;
+    title: string;
+    url: string;
+    draft: boolean;
+    state: string;
+    merged: boolean;
+    mergeable: boolean | null;
+    mergeableState: string;
+    additions: number;
+    deletions: number;
+    changedFiles: number;
+    commits: number;
+    author: string;
+    head: string;
+    headSha: string;
+    base: string;
+  };
+  files: {
+    filename: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+    patch: string;
+  }[];
+  reviews: {
+    id: number;
+    user: string;
+    state: string;
+    body: string;
+    submittedAt: string;
+  }[];
+  checks: {
+    name: string;
+    status: string;
+    conclusion: string | null;
+    url: string;
+  }[];
   combinedStatus: string;
   viewer: { login: string; isAuthor: boolean };
 };
 
-function PullRequestWorkspace({ result, created, githubToken, setGithubToken }: { result: AnalysisResult; created: { url: string; number: number; branch: string }; githubToken: string; setGithubToken: (value: string) => void }) {
-  const [data, setData] = useState<PRWorkspaceData | null>(null); const [loading, setLoading] = useState(true); const [working, setWorking] = useState(false); const [error, setError] = useState(""); const [reviewComplete, setReviewComplete] = useState(false); const [activeFile, setActiveFile] = useState(0); const [mergeMethod, setMergeMethod] = useState("squash"); const [deleteBranch, setDeleteBranch] = useState(true); const [merged, setMerged] = useState<{ sha: string } | null>(null);
-  async function action(name = "status", extra: Record<string, unknown> = {}) { setWorking(name !== "status"); setError(""); try { const response = await fetch("/api/github/pull-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: name, repositoryUrl: result.repository.url, number: created.number, githubToken, branch: created.branch, ...extra }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || "Pull request action failed"); if (body.merged) { setMerged(body); setGithubToken(""); return; } setData(body); } catch (cause) { setError(cause instanceof Error ? cause.message : "Pull request action failed"); } finally { setLoading(false); setWorking(false); } }
-  useEffect(() => { action(); }, []);
-  if (merged) return <><PageTitle eyebrow="DELIVERY / MERGED" title="Production-readiness changes merged"><Badge>MERGED</Badge></PageTitle><div className="panel p-8 text-center"><CheckCircle2 size={42} className="text-emerald-400 mx-auto"/><h2 className="text-2xl mt-5">Merge completed</h2><p className="text-zinc-500 text-sm mt-2">PR #{created.number} was merged into <code>{result.repository.branch}</code>. Connected deployment platforms may now begin a deployment.</p><div className="grid md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-7"><Metric label="MERGE COMMIT" value={merged.sha.slice(0, 7)}/><Metric label="READINESS" value={`${result.score} → ${result.projectedScore}`}/><Metric label="SOURCE BRANCH" value={deleteBranch ? "Deleted" : "Retained"}/></div><a href={created.url} target="_blank" rel="noreferrer" className="secondary mt-6">View merged PR on GitHub <ExternalLink size={15}/></a></div></>;
-  if (loading || !data) return <Empty icon={Loader2} title="Loading pull request" body="Rivet is synchronising the PR, changed files, reviews, and checks from GitHub."/>;
-  const checksPassing = data.checks.every((check) => check.status === "completed" && ["success", "neutral", "skipped"].includes(check.conclusion || ""));
-  const canMerge = reviewComplete && !data.pull.draft && data.pull.mergeable !== false && checksPassing;
-  const file = data.files[activeFile];
-  return <><PageTitle eyebrow="GITHUB / PR WORKSPACE" title={`${data.pull.title} #${data.pull.number}`}><div className="flex gap-2"><Badge>{data.pull.draft ? "DRAFT" : "READY"}</Badge><button onClick={() => action()} className="secondary py-1.5"><RefreshCw size={14}/> Refresh</button></div></PageTitle>{error && <div className="border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-300 mb-4">{error}</div>}<div className="grid lg:grid-cols-[1fr_350px] gap-4"><div className="space-y-4"><section className="panel"><div className="panel-head"><span>Files changed</span><span className="text-xs"><b className="text-emerald-400">+{data.pull.additions}</b> <b className="text-red-400 ml-2">−{data.pull.deletions}</b></span></div><div className="grid md:grid-cols-[230px_1fr] min-h-[430px]"><aside className="border-r border-line p-2">{data.files.map((item, index) => <button key={item.filename} onClick={() => setActiveFile(index)} className={`w-full text-left text-xs p-2.5 ${index === activeFile ? "bg-white/5" : ""}`}><span className="text-zinc-600 uppercase">{item.status[0]}</span><code className="ml-2">{item.filename}</code></button>)}</aside><div className="min-w-0">{file ? <><div className="panel-head"><code>{file.filename}</code><span className="text-xs text-zinc-600">+{file.additions} −{file.deletions}</span></div><pre className="p-4 overflow-auto text-xs leading-6 font-mono">{file.patch.split("\n").map((line, i) => <div key={i} className={line.startsWith("+") && !line.startsWith("+++") ? "diff-add" : line.startsWith("-") && !line.startsWith("---") ? "diff-remove" : ""}>{line}</div>)}</pre></> : <p className="p-6 text-sm text-zinc-500">No changed files returned.</p>}</div></div></section><section className="panel p-5"><h3>Checks and reviews</h3><div className="mt-4 space-y-3">{data.checks.length ? data.checks.map((check) => <div className="flex justify-between text-sm" key={check.name}><span>{check.name}</span><span className={check.conclusion === "success" ? "text-emerald-400" : check.status === "completed" ? "text-red-400" : "text-amber-300"}>{check.conclusion || check.status}</span></div>) : <p className="text-sm text-zinc-500">No GitHub checks are registered for this commit.</p>}{data.reviews.map((review) => <div className="flex justify-between text-sm border-t border-line pt-3" key={review.id}><span>{review.user} review</span><span className={review.state === "APPROVED" ? "text-emerald-400" : "text-amber-300"}>{review.state}</span></div>)}</div></section></div><aside className="space-y-4"><section className="panel p-5"><p className="label">HUMAN REVIEW</p><label className="flex gap-3 items-start mt-4 text-sm"><input type="checkbox" checked={reviewComplete} onChange={(event) => setReviewComplete(event.target.checked)} className="mt-1"/><span>I reviewed the changed files and understand that merging updates <code>{data.pull.base}</code> and may trigger deployment.</span></label>{data.pull.draft && <button disabled={!reviewComplete || working} onClick={() => action("ready")} className="secondary w-full justify-center mt-4">Mark ready for review</button>}{!data.viewer.isAuthor && !data.pull.draft && <button disabled={!reviewComplete || working} onClick={() => action("review", { event: "APPROVE" })} className="secondary w-full justify-center mt-2"><Check size={15}/> Approve on GitHub</button>}{data.viewer.isAuthor && <p className="text-[11px] text-zinc-600 mt-4 leading-5">You authored this PR, so GitHub does not allow formal self-approval. Rivet’s review confirmation still unlocks merge when repository rules permit it.</p>}</section><section className="panel p-5"><p className="label">MERGE</p><select value={mergeMethod} onChange={(event) => setMergeMethod(event.target.value)} className="input mt-3"><option value="squash">Squash and merge</option><option value="merge">Create merge commit</option><option value="rebase">Rebase and merge</option></select><label className="flex gap-2 text-xs text-zinc-500 mt-3"><input type="checkbox" checked={deleteBranch} onChange={(event) => setDeleteBranch(event.target.checked)}/>Delete Rivet branch after merge</label><div className="mt-4 space-y-2 text-xs"><Gate ok={reviewComplete} label="Rivet review complete"/><Gate ok={!data.pull.draft} label="PR is ready"/><Gate ok={checksPassing} label="Checks passed"/><Gate ok={data.pull.mergeable !== false} label="No detected conflicts"/></div><button disabled={!canMerge || working} onClick={() => action("merge", { mergeMethod, deleteBranch, commitTitle: data.pull.title })} className="primary w-full justify-center mt-5 disabled:opacity-40">{working ? <Loader2 size={15} className="animate-spin"/> : <GitPullRequest size={15}/>} Merge into {data.pull.base}</button><p className="text-[11px] text-zinc-600 mt-3">GitHub re-checks branch rules at merge time and will reject the action if a required approval or check is missing.</p></section><a href={data.pull.url} target="_blank" rel="noreferrer" className="secondary w-full justify-center">Open on GitHub <ExternalLink size={15}/></a></aside></div></>;
-}
-
-function DemoPullRequestWorkspace({ result, changes, onExit }: { result: AnalysisResult; changes: ProposedChange[]; onExit: () => void }) {
-  const [stage, setStage] = useState<"draft" | "reviewed" | "ready" | "merged">("draft"); const active = changes[0];
-  if (stage === "merged") return <><PageTitle eyebrow="DELIVERY / MERGED" title="Production-readiness changes merged"><Badge>DEMO</Badge></PageTitle><div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">Demo result — no repository write or deployment occurred.</div><div className="panel p-8 text-center"><CheckCircle2 size={42} className="text-emerald-400 mx-auto"/><h2 className="text-2xl mt-5">Merge completed</h2><p className="text-zinc-500 text-sm mt-2">PR #42 was squash-merged into <code>{result.repository.branch}</code>. A connected Vercel project would now start deployment.</p><div className="grid md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-7"><Metric label="MERGE COMMIT" value="demo9a1"/><Metric label="READINESS" value={`${result.score} → ${result.projectedScore}`}/><Metric label="BRANCH" value="Deleted"/></div><button onClick={onExit} className="secondary mt-6">Return to real PR setup</button></div></>;
-  return <><PageTitle eyebrow="GITHUB / PR WORKSPACE" title="Rivet: Production-readiness improvements #42"><Badge>DEMO · {stage.toUpperCase()}</Badge></PageTitle><div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">Interactive demo — these review and merge actions do not write to GitHub.</div><div className="grid lg:grid-cols-[1fr_350px] gap-4"><section className="panel"><div className="panel-head"><span>Files changed</span><span className="text-xs text-zinc-500">{changes.length} files</span></div><div className="p-5"><div className="flex flex-wrap gap-2 text-xs"><code className="border border-line px-2 py-1">rivet/readiness-demo</code><ArrowRight size={14}/><code className="border border-line px-2 py-1">{result.repository.branch}</code></div>{active && <><div className="panel-head mt-5"><code>{active.path}</code><span className="text-emerald-400">Proposed</span></div><pre className="p-4 bg-black/20 overflow-auto text-xs leading-6">{active.diff}</pre></>}</div></section><aside className="space-y-4"><section className="panel p-5"><p className="label">REVIEW AND APPROVAL</p><div className="mt-4 space-y-3"><Gate ok={stage !== "draft"} label="Changed files reviewed"/><Gate ok={stage === "ready"} label="PR ready and checks passed"/></div>{stage === "draft" && <button onClick={() => setStage("reviewed")} className="secondary w-full justify-center mt-4">Complete Rivet review</button>}{stage === "reviewed" && <button onClick={() => setStage("ready")} className="secondary w-full justify-center mt-4">Approve and mark ready</button>}</section><section className="panel p-5"><p className="label">MERGE</p><p className="text-xs text-zinc-500 mt-3">Squash and merge into <code>{result.repository.branch}</code>, then delete the source branch.</p><button disabled={stage !== "ready"} onClick={() => setStage("merged")} className="primary w-full justify-center mt-4 disabled:opacity-40"><GitPullRequest size={15}/> Merge for deployment</button></section><button onClick={onExit} className="secondary w-full justify-center">Exit demo</button></aside></div></>;
-}
-
-function Gate({ ok, label }: { ok: boolean; label: string }) { return <div className="flex gap-2 items-center"><span className={`w-4 h-4 grid place-items-center border ${ok ? "bg-emerald-400 border-emerald-400 text-black" : "border-zinc-700"}`}>{ok && <Check size={11}/>}</span><span className={ok ? "text-zinc-300" : "text-zinc-600"}>{label}</span></div>; }
-
-function Reports({ result, selected, changes, onReanalyse, onAnother }: { result: AnalysisResult; selected: AgentId[]; changes: ProposedChange[]; onReanalyse: () => void; onAnother: () => void }) {
-  function download() { const blob = new Blob([JSON.stringify({ ...result, selectedAgents: selected, proposedChanges: changes }, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${result.repository.name}-rivet-report.json`; a.click(); URL.revokeObjectURL(url); }
-  return <><PageTitle eyebrow="REPORTS / FINAL" title="Readiness report"><button onClick={download} className="secondary"><Download size={15}/> Export JSON</button></PageTitle><div className="grid md:grid-cols-4 gap-3"><Metric label="ORIGINAL SCORE" value={String(result.score)}/><Metric label="PROJECTED SCORE" value={String(result.projectedScore)}/><Metric label="FINDINGS" value={String(result.findings.filter((f) => f.status === "failed").length)}/><Metric label="PROPOSALS" value={String(changes.length)}/></div><section className="panel p-6 mt-4"><h3>Assessment limitations</h3><ul className="mt-4 space-y-3 text-sm text-zinc-500">{result.limitations.map((item) => <li className="flex gap-2" key={item}><AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5"/>{item}</li>)}</ul></section><div className="flex flex-wrap gap-3 mt-4"><button onClick={onReanalyse} className="secondary"><RefreshCw size={15}/> Re-run assessment</button><button onClick={onAnother} className="secondary">Analyse another repository</button></div></>;
-}
-
-function generateChanges(findings: Finding[], selected: AgentId[]): ProposedChange[] {
-  const failed = findings.filter((f) => f.status === "failed" && selected.includes(f.agentId as AgentId)); const result: ProposedChange[] = [];
-  const push = (path: string, agentId: AgentId, reason: string, diff: string, status: "added" | "modified" = "added") => result.push({ path, agentId, reason, diff, content: diff.split("\n").filter((line) => line.startsWith("+")).map((line) => line.replace(/^\+ ?/, "")).join("\n") + "\n", status });
-  if (selected.includes("security")) {
-    if (failed.some((f) => f.title.includes("Environment variable template"))) push(".env.example", "security", "Document required configuration without values.", "+ # Add required variable names only\n+ APP_ENV=development\n+ LOG_LEVEL=info");
-    if (failed.some((f) => f.title.includes("Environment files may"))) push(".gitignore", "security", "Prevent local environment credentials from being tracked.", "  node_modules\n+ .env\n+ .env.*\n+ !.env.example", "modified");
-    if (failed.some((f) => f.title.includes("Input validation"))) push("lib/validation.ts", "security", "Provide a reusable boundary validation helper.", "+ export function requireString(value: unknown, field: string) {\n+   if (typeof value !== 'string' || !value.trim()) {\n+     throw new Error(`${field} is required`);\n+   }\n+   return value.trim();\n+ }");
+function PullRequestWorkspace({
+  result,
+  created,
+  githubToken,
+  setGithubToken,
+}: {
+  result: AnalysisResult;
+  created: { url: string; number: number; branch: string };
+  githubToken: string;
+  setGithubToken: (value: string) => void;
+}) {
+  const [data, setData] = useState<PRWorkspaceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const [reviewComplete, setReviewComplete] = useState(false);
+  const [activeFile, setActiveFile] = useState(0);
+  const [mergeMethod, setMergeMethod] = useState("squash");
+  const [deleteBranch, setDeleteBranch] = useState(true);
+  const [merged, setMerged] = useState<{ sha: string } | null>(null);
+  async function action(name = "status", extra: Record<string, unknown> = {}) {
+    setWorking(name !== "status");
+    setError("");
+    try {
+      const response = await fetch("/api/github/pull-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: name,
+          repositoryUrl: result.repository.url,
+          number: created.number,
+          githubToken,
+          branch: created.branch,
+          ...extra,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error || "Pull request action failed");
+      if (body.merged) {
+        setMerged(body);
+        setGithubToken("");
+        return;
+      }
+      setData(body);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Pull request action failed",
+      );
+    } finally {
+      setLoading(false);
+      setWorking(false);
+    }
   }
-  if (selected.includes("testing")) { push("tests/readiness.test.ts", "testing", "Add a meaningful production-readiness smoke test scaffold.", "+ import { describe, expect, it } from 'vitest';\n+ describe('production readiness', () => {\n+   it('keeps required runtime configuration explicit', () => {\n+     expect(process.env.NODE_ENV).toBeDefined();\n+   });\n+ });"); }
-  if (selected.includes("cicd")) { push(".github/workflows/ci.yml", "cicd", "Run repository quality gates on pull requests.", "+ name: CI\n+ on: [push, pull_request]\n+ jobs:\n+   validate:\n+     runs-on: ubuntu-latest\n+     steps:\n+       - uses: actions/checkout@v4\n+       - uses: actions/setup-node@v4\n+         with:\n+           node-version: 20\n+           cache: npm\n+       - run: npm ci\n+       - run: npm run lint --if-present\n+       - run: npm run typecheck --if-present\n+       - run: npm test --if-present\n+       - run: npm run build"); }
+  useEffect(() => {
+    action();
+  }, []);
+  if (merged)
+    return (
+      <>
+        <PageTitle
+          eyebrow="DELIVERY / MERGED"
+          title="Production-readiness changes merged"
+        >
+          <Badge>MERGED</Badge>
+        </PageTitle>
+        <div className="panel p-8 text-center">
+          <CheckCircle2 size={42} className="text-emerald-400 mx-auto" />
+          <h2 className="text-2xl mt-5">Merge completed</h2>
+          <p className="text-zinc-500 text-sm mt-2">
+            PR #{created.number} was merged into{" "}
+            <code>{result.repository.branch}</code>. Connected deployment
+            platforms may now begin a deployment.
+          </p>
+          <div className="grid md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-7">
+            <Metric label="MERGE COMMIT" value={merged.sha.slice(0, 7)} />
+            <Metric
+              label="READINESS"
+              value={`${result.score} → ${result.projectedScore}`}
+            />
+            <Metric
+              label="SOURCE BRANCH"
+              value={deleteBranch ? "Deleted" : "Retained"}
+            />
+          </div>
+          <a
+            href={created.url}
+            target="_blank"
+            rel="noreferrer"
+            className="secondary mt-6"
+          >
+            View merged PR on GitHub <ExternalLink size={15} />
+          </a>
+        </div>
+      </>
+    );
+  if (loading || !data)
+    return (
+      <Empty
+        icon={Loader2}
+        title="Loading pull request"
+        body="Rivet is synchronising the PR, changed files, reviews, and checks from GitHub."
+      />
+    );
+  const checksPassing = data.checks.every(
+    (check) =>
+      check.status === "completed" &&
+      ["success", "neutral", "skipped"].includes(check.conclusion || ""),
+  );
+  const canMerge =
+    reviewComplete &&
+    !data.pull.draft &&
+    data.pull.mergeable !== false &&
+    checksPassing;
+  const file = data.files[activeFile];
+  return (
+    <>
+      <PageTitle
+        eyebrow="GITHUB / PR WORKSPACE"
+        title={`${data.pull.title} #${data.pull.number}`}
+      >
+        <div className="flex gap-2">
+          <Badge>{data.pull.draft ? "DRAFT" : "READY"}</Badge>
+          <button onClick={() => action()} className="secondary py-1.5">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+      </PageTitle>
+      {error && (
+        <div className="border border-red-500/40 bg-red-500/5 p-4 text-sm text-red-300 mb-4">
+          {error}
+        </div>
+      )}
+      <div className="grid lg:grid-cols-[1fr_350px] gap-4">
+        <div className="space-y-4">
+          <section className="panel">
+            <div className="panel-head">
+              <span>Files changed</span>
+              <span className="text-xs">
+                <b className="text-emerald-400">+{data.pull.additions}</b>{" "}
+                <b className="text-red-400 ml-2">−{data.pull.deletions}</b>
+              </span>
+            </div>
+            <div className="grid md:grid-cols-[230px_1fr] min-h-[430px]">
+              <aside className="border-r border-line p-2">
+                {data.files.map((item, index) => (
+                  <button
+                    key={item.filename}
+                    onClick={() => setActiveFile(index)}
+                    className={`w-full text-left text-xs p-2.5 ${index === activeFile ? "bg-white/5" : ""}`}
+                  >
+                    <span className="text-zinc-600 uppercase">
+                      {item.status[0]}
+                    </span>
+                    <code className="ml-2">{item.filename}</code>
+                  </button>
+                ))}
+              </aside>
+              <div className="min-w-0">
+                {file ? (
+                  <>
+                    <div className="panel-head">
+                      <code>{file.filename}</code>
+                      <span className="text-xs text-zinc-600">
+                        +{file.additions} −{file.deletions}
+                      </span>
+                    </div>
+                    <pre className="p-4 overflow-auto text-xs leading-6 font-mono">
+                      {file.patch.split("\n").map((line, i) => (
+                        <div
+                          key={i}
+                          className={
+                            line.startsWith("+") && !line.startsWith("+++")
+                              ? "diff-add"
+                              : line.startsWith("-") && !line.startsWith("---")
+                                ? "diff-remove"
+                                : ""
+                          }
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="p-6 text-sm text-zinc-500">
+                    No changed files returned.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+          <section className="panel p-5">
+            <h3>Checks and reviews</h3>
+            <div className="mt-4 space-y-3">
+              {data.checks.length ? (
+                data.checks.map((check) => (
+                  <div
+                    className="flex justify-between text-sm"
+                    key={check.name}
+                  >
+                    <span>{check.name}</span>
+                    <span
+                      className={
+                        check.conclusion === "success"
+                          ? "text-emerald-400"
+                          : check.status === "completed"
+                            ? "text-red-400"
+                            : "text-amber-300"
+                      }
+                    >
+                      {check.conclusion || check.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  No GitHub checks are registered for this commit.
+                </p>
+              )}
+              {data.reviews.map((review) => (
+                <div
+                  className="flex justify-between text-sm border-t border-line pt-3"
+                  key={review.id}
+                >
+                  <span>{review.user} review</span>
+                  <span
+                    className={
+                      review.state === "APPROVED"
+                        ? "text-emerald-400"
+                        : "text-amber-300"
+                    }
+                  >
+                    {review.state}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+        <aside className="space-y-4">
+          <section className="panel p-5">
+            <p className="label">HUMAN REVIEW</p>
+            <label className="flex gap-3 items-start mt-4 text-sm">
+              <input
+                type="checkbox"
+                checked={reviewComplete}
+                onChange={(event) => setReviewComplete(event.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                I reviewed the changed files and understand that merging updates{" "}
+                <code>{data.pull.base}</code> and may trigger deployment.
+              </span>
+            </label>
+            {data.pull.draft && (
+              <button
+                disabled={!reviewComplete || working}
+                onClick={() => action("ready")}
+                className="secondary w-full justify-center mt-4"
+              >
+                Mark ready for review
+              </button>
+            )}
+            {!data.viewer.isAuthor && !data.pull.draft && (
+              <button
+                disabled={!reviewComplete || working}
+                onClick={() => action("review", { event: "APPROVE" })}
+                className="secondary w-full justify-center mt-2"
+              >
+                <Check size={15} /> Approve on GitHub
+              </button>
+            )}
+            {data.viewer.isAuthor && (
+              <p className="text-[11px] text-zinc-600 mt-4 leading-5">
+                You authored this PR, so GitHub does not allow formal
+                self-approval. Rivet’s review confirmation still unlocks merge
+                when repository rules permit it.
+              </p>
+            )}
+          </section>
+          <section className="panel p-5">
+            <p className="label">MERGE</p>
+            <select
+              value={mergeMethod}
+              onChange={(event) => setMergeMethod(event.target.value)}
+              className="input mt-3"
+            >
+              <option value="squash">Squash and merge</option>
+              <option value="merge">Create merge commit</option>
+              <option value="rebase">Rebase and merge</option>
+            </select>
+            <label className="flex gap-2 text-xs text-zinc-500 mt-3">
+              <input
+                type="checkbox"
+                checked={deleteBranch}
+                onChange={(event) => setDeleteBranch(event.target.checked)}
+              />
+              Delete Rivet branch after merge
+            </label>
+            <div className="mt-4 space-y-2 text-xs">
+              <Gate ok={reviewComplete} label="Rivet review complete" />
+              <Gate ok={!data.pull.draft} label="PR is ready" />
+              <Gate ok={checksPassing} label="Checks passed" />
+              <Gate
+                ok={data.pull.mergeable !== false}
+                label="No detected conflicts"
+              />
+            </div>
+            <button
+              disabled={!canMerge || working}
+              onClick={() =>
+                action("merge", {
+                  mergeMethod,
+                  deleteBranch,
+                  commitTitle: data.pull.title,
+                })
+              }
+              className="primary w-full justify-center mt-5 disabled:opacity-40"
+            >
+              {working ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <GitPullRequest size={15} />
+              )}{" "}
+              Merge into {data.pull.base}
+            </button>
+            <p className="text-[11px] text-zinc-600 mt-3">
+              GitHub re-checks branch rules at merge time and will reject the
+              action if a required approval or check is missing.
+            </p>
+          </section>
+          <a
+            href={data.pull.url}
+            target="_blank"
+            rel="noreferrer"
+            className="secondary w-full justify-center"
+          >
+            Open on GitHub <ExternalLink size={15} />
+          </a>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function DemoPullRequestWorkspace({
+  result,
+  changes,
+  onExit,
+}: {
+  result: AnalysisResult;
+  changes: ProposedChange[];
+  onExit: () => void;
+}) {
+  const [stage, setStage] = useState<"draft" | "reviewed" | "ready" | "merged">(
+    "draft",
+  );
+  const active = changes[0];
+  if (stage === "merged")
+    return (
+      <>
+        <PageTitle
+          eyebrow="DELIVERY / MERGED"
+          title="Production-readiness changes merged"
+        >
+          <Badge>DEMO</Badge>
+        </PageTitle>
+        <div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">
+          Demo result — no repository write or deployment occurred.
+        </div>
+        <div className="panel p-8 text-center">
+          <CheckCircle2 size={42} className="text-emerald-400 mx-auto" />
+          <h2 className="text-2xl mt-5">Merge completed</h2>
+          <p className="text-zinc-500 text-sm mt-2">
+            PR #42 was squash-merged into{" "}
+            <code>{result.repository.branch}</code>. A connected Vercel project
+            would now start deployment.
+          </p>
+          <div className="grid md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-7">
+            <Metric label="MERGE COMMIT" value="demo9a1" />
+            <Metric
+              label="READINESS"
+              value={`${result.score} → ${result.projectedScore}`}
+            />
+            <Metric label="BRANCH" value="Deleted" />
+          </div>
+          <button onClick={onExit} className="secondary mt-6">
+            Return to real PR setup
+          </button>
+        </div>
+      </>
+    );
+  return (
+    <>
+      <PageTitle
+        eyebrow="GITHUB / PR WORKSPACE"
+        title="Rivet: Production-readiness improvements #42"
+      >
+        <Badge>DEMO · {stage.toUpperCase()}</Badge>
+      </PageTitle>
+      <div className="border border-amber-400/30 bg-amber-400/[.04] p-4 mb-4 text-sm text-amber-200">
+        Interactive demo — these review and merge actions do not write to
+        GitHub.
+      </div>
+      <div className="grid lg:grid-cols-[1fr_350px] gap-4">
+        <section className="panel">
+          <div className="panel-head">
+            <span>Files changed</span>
+            <span className="text-xs text-zinc-500">
+              {changes.length} files
+            </span>
+          </div>
+          <div className="p-5">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <code className="border border-line px-2 py-1">
+                rivet/readiness-demo
+              </code>
+              <ArrowRight size={14} />
+              <code className="border border-line px-2 py-1">
+                {result.repository.branch}
+              </code>
+            </div>
+            {active && (
+              <>
+                <div className="panel-head mt-5">
+                  <code>{active.path}</code>
+                  <span className="text-emerald-400">Proposed</span>
+                </div>
+                <pre className="p-4 bg-black/20 overflow-auto text-xs leading-6">
+                  {active.diff}
+                </pre>
+              </>
+            )}
+          </div>
+        </section>
+        <aside className="space-y-4">
+          <section className="panel p-5">
+            <p className="label">REVIEW AND APPROVAL</p>
+            <div className="mt-4 space-y-3">
+              <Gate ok={stage !== "draft"} label="Changed files reviewed" />
+              <Gate ok={stage === "ready"} label="PR ready and checks passed" />
+            </div>
+            {stage === "draft" && (
+              <button
+                onClick={() => setStage("reviewed")}
+                className="secondary w-full justify-center mt-4"
+              >
+                Complete Rivet review
+              </button>
+            )}
+            {stage === "reviewed" && (
+              <button
+                onClick={() => setStage("ready")}
+                className="secondary w-full justify-center mt-4"
+              >
+                Approve and mark ready
+              </button>
+            )}
+          </section>
+          <section className="panel p-5">
+            <p className="label">MERGE</p>
+            <p className="text-xs text-zinc-500 mt-3">
+              Squash and merge into <code>{result.repository.branch}</code>,
+              then delete the source branch.
+            </p>
+            <button
+              disabled={stage !== "ready"}
+              onClick={() => setStage("merged")}
+              className="primary w-full justify-center mt-4 disabled:opacity-40"
+            >
+              <GitPullRequest size={15} /> Merge for deployment
+            </button>
+          </section>
+          <button onClick={onExit} className="secondary w-full justify-center">
+            Exit demo
+          </button>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function Gate({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex gap-2 items-center">
+      <span
+        className={`w-4 h-4 grid place-items-center border ${ok ? "bg-emerald-400 border-emerald-400 text-black" : "border-zinc-700"}`}
+      >
+        {ok && <Check size={11} />}
+      </span>
+      <span className={ok ? "text-zinc-300" : "text-zinc-600"}>{label}</span>
+    </div>
+  );
+}
+
+function Reports({
+  result,
+  selected,
+  changes,
+  onReanalyse,
+  onAnother,
+}: {
+  result: AnalysisResult;
+  selected: AgentId[];
+  changes: ProposedChange[];
+  onReanalyse: () => void;
+  onAnother: () => void;
+}) {
+  function download() {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          { ...result, selectedAgents: selected, proposedChanges: changes },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${result.repository.name}-rivet-report.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <>
+      <PageTitle eyebrow="REPORTS / FINAL" title="Readiness report">
+        <button onClick={download} className="secondary">
+          <Download size={15} /> Export JSON
+        </button>
+      </PageTitle>
+      <div className="grid md:grid-cols-4 gap-3">
+        <Metric label="ORIGINAL SCORE" value={String(result.score)} />
+        <Metric label="PROJECTED SCORE" value={String(result.projectedScore)} />
+        <Metric
+          label="FINDINGS"
+          value={String(
+            result.findings.filter((f) => f.status === "failed").length,
+          )}
+        />
+        <Metric label="PROPOSALS" value={String(changes.length)} />
+      </div>
+      <section className="panel p-6 mt-4">
+        <h3>Assessment limitations</h3>
+        <ul className="mt-4 space-y-3 text-sm text-zinc-500">
+          {result.limitations.map((item) => (
+            <li className="flex gap-2" key={item}>
+              <AlertTriangle
+                size={15}
+                className="text-amber-400 shrink-0 mt-0.5"
+              />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <div className="flex flex-wrap gap-3 mt-4">
+        <button onClick={onReanalyse} className="secondary">
+          <RefreshCw size={15} /> Re-run assessment
+        </button>
+        <button onClick={onAnother} className="secondary">
+          Analyse another repository
+        </button>
+      </div>
+    </>
+  );
+}
+
+function generateChanges(
+  findings: Finding[],
+  selected: AgentId[],
+): ProposedChange[] {
+  const failed = findings.filter(
+    (f) => f.status === "failed" && selected.includes(f.agentId as AgentId),
+  );
+  const result: ProposedChange[] = [];
+  const push = (
+    path: string,
+    agentId: AgentId,
+    reason: string,
+    diff: string,
+    status: "added" | "modified" = "added",
+  ) =>
+    result.push({
+      path,
+      agentId,
+      reason,
+      diff,
+      content:
+        diff
+          .split("\n")
+          .filter((line) => line.startsWith("+"))
+          .map((line) => line.replace(/^\+ ?/, ""))
+          .join("\n") + "\n",
+      status,
+    });
+  if (selected.includes("security")) {
+    if (failed.some((f) => f.title.includes("Environment variable template")))
+      push(
+        ".env.example",
+        "security",
+        "Document required configuration without values.",
+        "+ # Add required variable names only\n+ APP_ENV=development\n+ LOG_LEVEL=info",
+      );
+    if (failed.some((f) => f.title.includes("Environment files may")))
+      push(
+        ".gitignore",
+        "security",
+        "Prevent local environment credentials from being tracked.",
+        "  node_modules\n+ .env\n+ .env.*\n+ !.env.example",
+        "modified",
+      );
+    if (failed.some((f) => f.title.includes("Input validation")))
+      push(
+        "lib/validation.ts",
+        "security",
+        "Provide a reusable boundary validation helper.",
+        "+ export function requireString(value: unknown, field: string) {\n+   if (typeof value !== 'string' || !value.trim()) {\n+     throw new Error(`${field} is required`);\n+   }\n+   return value.trim();\n+ }",
+      );
+  }
+  if (selected.includes("testing")) {
+    push(
+      "tests/readiness.test.ts",
+      "testing",
+      "Add a meaningful production-readiness smoke test scaffold.",
+      "+ import { describe, expect, it } from 'vitest';\n+ describe('production readiness', () => {\n+   it('keeps required runtime configuration explicit', () => {\n+     expect(process.env.NODE_ENV).toBeDefined();\n+   });\n+ });",
+    );
+  }
+  if (selected.includes("cicd")) {
+    push(
+      ".github/workflows/ci.yml",
+      "cicd",
+      "Run repository quality gates on pull requests.",
+      "+ name: CI\n+ on: [push, pull_request]\n+ jobs:\n+   validate:\n+     runs-on: ubuntu-latest\n+     steps:\n+       - uses: actions/checkout@v4\n+       - uses: actions/setup-node@v4\n+         with:\n+           node-version: 20\n+           cache: npm\n+       - run: npm ci\n+       - run: npm run lint --if-present\n+       - run: npm run typecheck --if-present\n+       - run: npm test --if-present\n+       - run: npm run build",
+    );
+  }
   if (selected.includes("observability")) {
-    if (failed.some((f) => f.title.includes("Health-check"))) push("app/api/health/route.ts", "observability", "Expose lightweight service health and build metadata.", "+ import { NextResponse } from 'next/server';\n+ export function GET() {\n+   return NextResponse.json({ status: 'ok', timestamp: new Date().toISOString() });\n+ }");
-    push("lib/logger.ts", "observability", "Introduce consistent structured operational logging.", "+ export function log(event: string, context: Record<string, unknown> = {}) {\n+   console.info(JSON.stringify({ level: 'info', event, ...context, timestamp: new Date().toISOString() }));\n+ }");
+    if (failed.some((f) => f.title.includes("Health-check")))
+      push(
+        "app/api/health/route.ts",
+        "observability",
+        "Expose lightweight service health and build metadata.",
+        "+ import { NextResponse } from 'next/server';\n+ export function GET() {\n+   return NextResponse.json({ status: 'ok', timestamp: new Date().toISOString() });\n+ }",
+      );
+    push(
+      "lib/logger.ts",
+      "observability",
+      "Introduce consistent structured operational logging.",
+      "+ export function log(event: string, context: Record<string, unknown> = {}) {\n+   console.info(JSON.stringify({ level: 'info', event, ...context, timestamp: new Date().toISOString() }));\n+ }",
+    );
   }
   return result;
 }
 
-function recommendedAgents(findings: Finding[]): AgentId[] { return agentCatalog.filter((agent) => findings.some((finding) => finding.status === "failed" && finding.agentId === agent.id)).map((agent) => agent.id); }
-function PageTitle({ eyebrow, title, children }: { eyebrow: string; title: string; children?: React.ReactNode }) { return <div className="flex flex-wrap justify-between items-end gap-4 mb-7"><div><p className="eyebrow">{eyebrow}</p><h1 className="text-2xl mt-2">{title}</h1></div>{children}</div>; }
-function Brand() { return <div className="flex gap-2.5 items-center font-semibold tracking-tight"><Image src="/rivet-logo.png" alt="Rivet logo" width={32} height={32} priority className="h-8 w-8 rounded-md object-cover ring-1 ring-white/10"/><span>Rivet</span></div>; }
-function Badge({ children }: { children: React.ReactNode }) { return <span className="font-mono text-[10px] border border-line px-2 py-1 text-zinc-400">{children}</span>; }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const isWriteToken = label === "Fine-grained GitHub token";
-  const control = isWriteToken && isValidElement<React.InputHTMLAttributes<HTMLInputElement>>(children) ? cloneElement(children, { placeholder: "Paste your github_pat_... access token" }) : children;
-  return <label className="block"><span className="label block mb-2">{isWriteToken ? "Your GitHub access token" : label}</span>{isWriteToken && <div className="border border-amber-400/25 bg-amber-400/[.04] p-3 mb-3"><p className="text-xs text-zinc-300 leading-5">Rivet needs a temporary access token from <strong>your GitHub account</strong> to create the branch and draft pull request. Paste the generated token below—not the permission names.</p><details className="mt-3"><summary className="text-xs text-amber-300 cursor-pointer">I don’t have a token — show me how</summary><ol className="list-decimal ml-4 mt-3 space-y-2 text-[11px] text-zinc-500 leading-5"><li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub’s token creator</a>.</li><li>Select the repository you are analysing.</li><li>Set <strong className="text-zinc-300">Contents</strong> and <strong className="text-zinc-300">Pull requests</strong> to <strong className="text-zinc-300">Read and write</strong>.</li><li>Generate the token, then paste the value beginning with <code className="text-zinc-300">github_pat_</code> below.</li></ol></details></div>}{control}</label>;
+function recommendedAgents(findings: Finding[]): AgentId[] {
+  return agentCatalog
+    .filter((agent) =>
+      findings.some(
+        (finding) =>
+          finding.status === "failed" && finding.agentId === agent.id,
+      ),
+    )
+    .map((agent) => agent.id);
 }
-function Metric({ label, value }: { label: string; value: string }) { return <div className="bg-black/20 border border-line p-3"><p className="label">{label}</p><p className="text-lg mt-1 truncate">{value}</p></div>; }
-function Mini({ label, value }: { label: string; value: string }) { return <div><p className="text-[9px] font-mono text-zinc-600">{label}</p><p className="text-[11px] mt-1 truncate">{value}</p></div>; }
-function Score({ score }: { score: number }) { return <div className="w-40 h-40 rounded-full border-[10px] border-zinc-800 border-t-accent mx-auto grid place-items-center"><div className="text-center"><b className="text-5xl">{score}</b><p className="text-xs text-zinc-500">OF 100</p></div></div>; }
-function Severity({ value, status }: { value: string; status: string }) { return <span className={`text-xs uppercase font-mono ${status === "passed" ? "text-emerald-400" : value === "critical" ? "text-red-400" : value === "high" ? "text-orange-400" : "text-amber-300"}`}>{status === "passed" ? "Passed" : value}</span>; }
-function FindingRow({ finding }: { finding: Finding }) { return <div className="grid grid-cols-[90px_1fr_180px] gap-3 px-4 py-3 border-t border-line text-sm items-center"><Severity value={finding.severity} status={finding.status}/><span>{finding.title}</span><code className="text-xs text-zinc-600 truncate">{finding.file}</code></div>; }
-function Empty({ icon: Icon, title, body, action, onAction }: { icon: typeof Code2; title: string; body: string; action?: string; onAction?: () => void }) { return <div className="panel py-20 px-6 text-center"><Icon className="mx-auto text-zinc-700" size={34}/><h2 className="mt-5 text-lg">{title}</h2><p className="text-sm text-zinc-500 max-w-md mx-auto mt-2">{body}</p>{action && onAction && <button onClick={onAction} className="primary mt-6 mx-auto">{action}</button>}</div>; }
+function PageTitle({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap justify-between items-end gap-4 mb-7">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 className="text-2xl mt-2">{title}</h1>
+      </div>
+      {children}
+    </div>
+  );
+}
+function Brand() {
+  return (
+    <div className="flex gap-2.5 items-center font-semibold tracking-tight">
+      <Image
+        src="/rivet-logo.png"
+        alt="Rivet logo"
+        width={32}
+        height={32}
+        priority
+        className="h-8 w-8 rounded-md object-cover ring-1 ring-white/10"
+      />
+      <span>Rivet</span>
+    </div>
+  );
+}
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="font-mono text-[10px] border border-line px-2 py-1 text-zinc-400">
+      {children}
+    </span>
+  );
+}
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  const isWriteToken = label === "Fine-grained GitHub token";
+  const control =
+    isWriteToken &&
+    isValidElement<React.InputHTMLAttributes<HTMLInputElement>>(children)
+      ? cloneElement(children, {
+          placeholder: "Paste your github_pat_... access token",
+        })
+      : children;
+  return (
+    <label className="block">
+      <span className="label block mb-2">
+        {isWriteToken ? "Your GitHub access token" : label}
+      </span>
+      {isWriteToken && (
+        <div className="border border-amber-400/25 bg-amber-400/[.04] p-3 mb-3">
+          <p className="text-xs text-zinc-300 leading-5">
+            Rivet needs a temporary access token from{" "}
+            <strong>your GitHub account</strong> to create the branch and draft
+            pull request. Paste the generated token below—not the permission
+            names.
+          </p>
+          <details className="mt-3">
+            <summary className="text-xs text-amber-300 cursor-pointer">
+              I don’t have a token — show me how
+            </summary>
+            <ol className="list-decimal ml-4 mt-3 space-y-2 text-[11px] text-zinc-500 leading-5">
+              <li>
+                Open{" "}
+                <a
+                  href="https://github.com/settings/personal-access-tokens/new"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-400 hover:underline"
+                >
+                  GitHub’s token creator
+                </a>
+                .
+              </li>
+              <li>Select the repository you are analysing.</li>
+              <li>
+                Set <strong className="text-zinc-300">Contents</strong> and{" "}
+                <strong className="text-zinc-300">Pull requests</strong> to{" "}
+                <strong className="text-zinc-300">Read and write</strong>.
+              </li>
+              <li>
+                Generate the token, then paste the value beginning with{" "}
+                <code className="text-zinc-300">github_pat_</code> below.
+              </li>
+            </ol>
+          </details>
+        </div>
+      )}
+      {control}
+    </label>
+  );
+}
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-black/20 border border-line p-3">
+      <p className="label">{label}</p>
+      <p className="text-lg mt-1 truncate">{value}</p>
+    </div>
+  );
+}
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[9px] font-mono text-zinc-600">{label}</p>
+      <p className="text-[11px] mt-1 truncate">{value}</p>
+    </div>
+  );
+}
+function Score({ score }: { score: number }) {
+  return (
+    <div className="w-40 h-40 rounded-full border-[10px] border-zinc-800 border-t-accent mx-auto grid place-items-center">
+      <div className="text-center">
+        <b className="text-5xl">{score}</b>
+        <p className="text-xs text-zinc-500">OF 100</p>
+      </div>
+    </div>
+  );
+}
+function Severity({ value, status }: { value: string; status: string }) {
+  return (
+    <span
+      className={`text-xs uppercase font-mono ${status === "passed" ? "text-emerald-400" : value === "critical" ? "text-red-400" : value === "high" ? "text-orange-400" : "text-amber-300"}`}
+    >
+      {status === "passed" ? "Passed" : value}
+    </span>
+  );
+}
+function FindingRow({ finding }: { finding: Finding }) {
+  return (
+    <div className="grid grid-cols-[90px_1fr_180px] gap-3 px-4 py-3 border-t border-line text-sm items-center">
+      <Severity value={finding.severity} status={finding.status} />
+      <span>{finding.title}</span>
+      <code className="text-xs text-zinc-600 truncate">{finding.file}</code>
+    </div>
+  );
+}
+function Empty({
+  icon: Icon,
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  icon: typeof Code2;
+  title: string;
+  body: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="panel py-20 px-6 text-center">
+      <Icon className="mx-auto text-zinc-700" size={34} />
+      <h2 className="mt-5 text-lg">{title}</h2>
+      <p className="text-sm text-zinc-500 max-w-md mx-auto mt-2">{body}</p>
+      {action && onAction && (
+        <button onClick={onAction} className="primary mt-6 mx-auto">
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
