@@ -22,4 +22,5 @@
   .tabs .tab-active{@apply text-white border-b border-accent}
   .diff-add{@apply text-emerald-300 bg-emerald-400/5}
   .diff-remove{@apply text-red-300 bg-red-400/5}
+  .pr-actions > :first-child{@apply hidden}
 }
