@@ -627,8 +627,9 @@ function AppShell({
         </nav>
         <button
           onClick={() => setScreen("connect")}
-          className="mt-auto text-left text-xs text-zinc-500 border-t border-line pt-4 hover:text-white"
+          className="mt-auto flex items-center gap-2 border border-accent/50 bg-accent/10 px-3 py-3 text-left text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-black"
         >
+          <RefreshCw size={14} />
           Analyse another repository
         </button>
       </aside>
