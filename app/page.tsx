@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { cloneElement, isValidElement, useMemo, useState } from "react";
 import { Activity, AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, CircleDollarSign, Code2, Download, ExternalLink, FileCode2, FileSearch, Github, GitPullRequest, Loader2, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, TestTube2, Workflow, XCircle } from "lucide-react";
 import type { AnalysisResult, Finding, ProposedChange } from "@/lib/analysis/types";
 
@@ -174,7 +174,11 @@ function recommendedAgents(findings: Finding[]): AgentId[] { return agentCatalog
 function PageTitle({ eyebrow, title, children }: { eyebrow: string; title: string; children?: React.ReactNode }) { return <div className="flex flex-wrap justify-between items-end gap-4 mb-7"><div><p className="eyebrow">{eyebrow}</p><h1 className="text-2xl mt-2">{title}</h1></div>{children}</div>; }
 function Brand() { return <div className="flex gap-2.5 items-center font-semibold tracking-tight"><Image src="/rivet-logo.png" alt="Rivet logo" width={32} height={32} priority className="h-8 w-8 rounded-md object-cover ring-1 ring-white/10"/><span>Rivet</span></div>; }
 function Badge({ children }: { children: React.ReactNode }) { return <span className="font-mono text-[10px] border border-line px-2 py-1 text-zinc-400">{children}</span>; }
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="label block mb-2">{label}</span>{children}</label>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const isWriteToken = label === "Fine-grained GitHub token";
+  const control = isWriteToken && isValidElement<React.InputHTMLAttributes<HTMLInputElement>>(children) ? cloneElement(children, { placeholder: "Paste your github_pat_... access token" }) : children;
+  return <label className="block"><span className="label block mb-2">{isWriteToken ? "Your GitHub access token" : label}</span>{isWriteToken && <div className="border border-amber-400/25 bg-amber-400/[.04] p-3 mb-3"><p className="text-xs text-zinc-300 leading-5">Rivet needs a temporary access token from <strong>your GitHub account</strong> to create the branch and draft pull request. Paste the generated token below—not the permission names.</p><details className="mt-3"><summary className="text-xs text-amber-300 cursor-pointer">I don’t have a token — show me how</summary><ol className="list-decimal ml-4 mt-3 space-y-2 text-[11px] text-zinc-500 leading-5"><li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub’s token creator</a>.</li><li>Select the repository you are analysing.</li><li>Set <strong className="text-zinc-300">Contents</strong> and <strong className="text-zinc-300">Pull requests</strong> to <strong className="text-zinc-300">Read and write</strong>.</li><li>Generate the token, then paste the value beginning with <code className="text-zinc-300">github_pat_</code> below.</li></ol></details></div>}{control}</label>;
+}
 function Metric({ label, value }: { label: string; value: string }) { return <div className="bg-black/20 border border-line p-3"><p className="label">{label}</p><p className="text-lg mt-1 truncate">{value}</p></div>; }
 function Mini({ label, value }: { label: string; value: string }) { return <div><p className="text-[9px] font-mono text-zinc-600">{label}</p><p className="text-[11px] mt-1 truncate">{value}</p></div>; }
 function Score({ score }: { score: number }) { return <div className="w-40 h-40 rounded-full border-[10px] border-zinc-800 border-t-accent mx-auto grid place-items-center"><div className="text-center"><b className="text-5xl">{score}</b><p className="text-xs text-zinc-500">OF 100</p></div></div>; }
