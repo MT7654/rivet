@@ -56,6 +56,7 @@ type Screen =
 type AgentId = "security" | "testing" | "cicd" | "observability";
 type ExecutionMode = "fast" | "balanced" | "quality";
 type AgentMetric = { model: string; inputTokens: number; outputTokens: number; totalTokens: number; durationMs: number; estimatedCost: number | null; cached?: boolean };
+type ReadinessTarget = 75 | 90 | 100;
 
 const nav: { label: string; screen: Screen }[] = [
   { label: "Overview", screen: "overview" },
@@ -115,6 +116,17 @@ const agentCatalog = [
   },
 ];
 
+const supportedAgentIds = new Set(["security", "testing", "cicd", "observability"]);
+const scoreRecovery: Record<Finding["severity"], number> = { critical: 10, high: 7, medium: 4, low: 1 };
+const futureAgents: Record<string, string> = { "future-authentication": "Authentication Agent", "future-rate-limiting": "Rate Limiting Agent", "future-audit-trail": "Audit Trail Agent" };
+function pilotAssessment(findings: Finding[], score: number, target: number) {
+  const supported = findings.filter((finding) => finding.status === "failed" && finding.autoFixable && supportedAgentIds.has(finding.agentId));
+  const unsupported = findings.filter((finding) => finding.status === "failed" && !supportedAgentIds.has(finding.agentId));
+  const recoverable = supported.reduce((sum, finding) => sum + scoreRecovery[finding.severity], 0);
+  const maximum = Math.min(100, score + recoverable);
+  return { supported, unsupported, recoverable, maximum, achievable: maximum >= target, gap: Math.max(0, target - maximum) };
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("landing");
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -127,6 +139,7 @@ export default function Home() {
   const [changes, setChanges] = useState<ProposedChange[]>([]);
   const [agentReports, setAgentReports] = useState<Record<string, string>>({});
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("balanced");
+  const [readinessTarget, setReadinessTarget] = useState<ReadinessTarget>(90);
   const [agentMetrics, setAgentMetrics] = useState<Record<string, AgentMetric>>({});
   const [agentProgress, setAgentProgress] = useState<Record<string, "queued" | "running" | "complete" | "cached" | "failed">>({});
   const [executionStartedAt, setExecutionStartedAt] = useState<number | null>(null);
@@ -236,9 +249,9 @@ export default function Home() {
     };
     if (executionMode === "fast") {
       const compact = selected.map((id) => ({ agent: id, findings: result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id).map(({ title, severity, file, remediation }) => ({ title, severity, file, remediation })) }));
-      await requestReport(selected[0], `Produce concise separate sections for these specialist agents. Maximum five bullets per agent. ${JSON.stringify(compact)}`);
+      await requestReport(selected[0], `Pilot target readiness: ${readinessTarget}. Produce concise separate sections for these specialist agents and prioritize the highest score recovery. Maximum five bullets per agent. ${JSON.stringify(compact)}`);
       for (const id of selected.slice(1)) { reports[id] = `[Fast batched report]\n\n${reports[selected[0]]}`; metrics[id] = { ...metrics[selected[0]], inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: 0 }; setAgentProgress((current) => ({ ...current, [id]: "complete" })); }
-    } else await Promise.all(selected.map(async (id) => { const agent = agentCatalog.find((item) => item.id === id)!; const compact = result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id).map(({ title, severity, explanation, remediation, file }) => ({ title, severity, explanation, remediation, file })); await requestReport(id, `Act as the ${agent.name}. Produce a concise implementation report using only: ${JSON.stringify(compact)}`); }));
+    } else await Promise.all(selected.map(async (id) => { const agent = agentCatalog.find((item) => item.id === id)!; const compact = result.findings.filter((finding) => finding.status === "failed" && finding.agentId === id).map(({ title, severity, explanation, remediation, file }) => ({ title, severity, explanation, remediation, file })); await requestReport(id, `Act as the ${agent.name}. Pilot target readiness: ${readinessTarget}. Prioritize maximum validated score recovery and produce a concise implementation report using only: ${JSON.stringify(compact)}`); }));
     setAgentReports(reports); setAgentMetrics(metrics); setChanges(generateChanges(result.findings, selected)); setExecutionState("complete");
   }
 
@@ -275,6 +288,7 @@ export default function Home() {
       {screen === "overview" && (
         <Overview
           result={result}
+          target={readinessTarget}
           onFindings={() => setScreen("findings")}
           onAgents={() => setScreen("agents")}
         />
@@ -284,10 +298,13 @@ export default function Home() {
       {screen === "agents" && (
         <Agents
           findings={result.findings}
+          score={result.score}
           selected={selected}
           setSelected={setSelected}
           executionMode={executionMode}
           setExecutionMode={setExecutionMode}
+          target={readinessTarget}
+          setTarget={setReadinessTarget}
           onRun={runAgents}
         />
       )}
@@ -301,6 +318,7 @@ export default function Home() {
           progress={agentProgress}
           elapsedSeconds={elapsedSeconds}
           metrics={agentMetrics}
+          target={readinessTarget}
           onStart={runAgents}
           onReview={() => setScreen("changes")}
         />
@@ -308,6 +326,7 @@ export default function Home() {
       {screen === "changes" && (
         <Changes
           changes={changes}
+          target={readinessTarget}
           reports={agentReports}
           metrics={agentMetrics}
           mode={executionMode}
@@ -328,6 +347,7 @@ export default function Home() {
       {screen === "reports" && (
         <Reports
           result={result}
+          target={readinessTarget}
           selected={selected}
           changes={changes}
           onReanalyse={() => analyse(result.repository.url)}
@@ -642,14 +662,17 @@ function AppShell({
 
 function Overview({
   result,
+  target,
   onFindings,
   onAgents,
 }: {
   result: AnalysisResult;
+  target: ReadinessTarget;
   onFindings: () => void;
   onAgents: () => void;
 }) {
   const failed = result.findings.filter((f) => f.status === "failed");
+  const pilot = pilotAssessment(result.findings, result.score, target);
   return (
     <>
       <PageTitle eyebrow="READINESS / OVERVIEW" title="Production readiness">
@@ -693,6 +716,11 @@ function Overview({
           </div>
         </section>
       </div>
+      <section className={`panel p-5 mt-4 ${pilot.achievable ? "border-emerald-500/30" : "border-amber-400/30"}`}>
+        <div className="flex flex-wrap justify-between gap-4"><div><p className="label">PATH TO PRODUCTION READY</p><h3 className="mt-2">{pilot.achievable ? `The pilot agents can reach your ${target}+ target` : `Pilot capability limit: approximately ${pilot.maximum}`}</h3><p className="text-sm text-zinc-500 mt-2 max-w-3xl">{pilot.achievable ? `Rivet can recover approximately ${pilot.recoverable} points using the four available specialist agents. Points become validated only after branch checks and re-analysis.` : `Rivet’s four pilot agents can raise this repository from ${result.score} to approximately ${pilot.maximum}. Reaching ${target} requires ${pilot.unsupported.length} control${pilot.unsupported.length === 1 ? "" : "s"} that the current pilot cannot implement automatically. These controls are planned for future Rivet releases and can be addressed manually today.`}</p></div><div className="grid grid-cols-3 gap-2 min-w-[280px]"><Metric label="CURRENT" value={String(result.score)}/><Metric label="PILOT MAX" value={String(pilot.maximum)}/><Metric label="TARGET" value={String(target)}/></div></div>
+        {!pilot.achievable && <div className="grid md:grid-cols-3 gap-2 mt-4">{pilot.unsupported.slice(0, 3).map((finding) => <div className="bg-black/20 border border-line p-3" key={finding.id}><p className="text-xs">{finding.title}</p><p className="text-[10px] text-zinc-600 mt-1">{futureAgents[finding.agentId] || "Manual configuration"} · planned future release</p></div>)}</div>}
+        <div className="grid grid-cols-5 gap-1 mt-4 text-[9px] font-mono text-zinc-600">{[[0,"Prototype"],[40,"Early Stage"],[60,"Pre-Production"],[75,"Production Candidate"],[90,"Production Ready"]].map(([score,label]) => <div className={`border-t pt-2 ${result.score >= Number(score) ? "border-accent text-zinc-300" : "border-line"}`} key={String(label)}>{score}+<br/>{label}</div>)}</div>
+      </section>
       <div className="grid lg:grid-cols-[1fr_360px] gap-4 mt-4">
         <section className="panel">
           <div className="panel-head">
@@ -884,7 +912,8 @@ function Findings({ findings }: { findings: Finding[] }) {
                   <p className="text-zinc-400 mt-2 leading-6">
                     {finding.remediation}
                   </p>
-                  <div className="grid grid-cols-3 mt-5 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 mt-5 gap-3">
+                    <Metric label="SCORE IMPACT" value={`−${scoreRecovery[finding.severity]}`}/>
                     <Metric
                       label="CONFIDENCE"
                       value={`${finding.confidence}%`}
@@ -904,17 +933,23 @@ function Findings({ findings }: { findings: Finding[] }) {
 
 function Agents({
   findings,
+  score,
   selected,
   setSelected,
   executionMode,
   setExecutionMode,
+  target,
+  setTarget,
   onRun,
 }: {
   findings: Finding[];
+  score: number;
   selected: AgentId[];
   setSelected: (v: AgentId[]) => void;
   executionMode: ExecutionMode;
   setExecutionMode: (v: ExecutionMode) => void;
+  target: ReadinessTarget;
+  setTarget: (v: ReadinessTarget) => void;
   onRun: () => void;
 }) {
   const relevant = (id: string) =>
@@ -927,6 +962,8 @@ function Agents({
   const estimatedTokens = Math.round(tokens * modeMultiplier);
   const estimatedOutput = Math.round(selected.length * (executionMode === "fast" ? 420 : executionMode === "quality" ? 1200 : 700));
   const estimatedCost = estimatedTokens / 1_000_000 * 1.4 + estimatedOutput / 1_000_000 * 4.4;
+  const pilot = pilotAssessment(findings, score, target);
+  const chooseTarget = (value: ReadinessTarget) => { setTarget(value); const required = Array.from(new Set(findings.filter((finding) => finding.status === "failed" && finding.autoFixable && supportedAgentIds.has(finding.agentId)).map((finding) => finding.agentId))) as AgentId[]; setSelected(required); };
   return (
     <>
       <PageTitle eyebrow="ORCHESTRATOR / AGENTS" title="Specialist agent plan">
@@ -943,6 +980,7 @@ function Agents({
         reviewable proposals; this deployment does not write to the target
         repository.
       </p>
+      <section className={`panel p-5 mb-4 ${pilot.achievable ? "border-emerald-500/30" : "border-amber-400/30"}`}><div className="flex flex-wrap justify-between gap-4"><div><p className="label">READINESS OBJECTIVE</p><h3 className="mt-2">{pilot.achievable ? `Target ${target} is achievable by the pilot` : `Pilot maximum: approximately ${pilot.maximum}`}</h3><p className="text-xs text-zinc-500 mt-2 max-w-2xl">{pilot.achievable ? "Rivet selected the supported findings and agents required to maximize validated score recovery." : `The four pilot agents cannot reach ${target}. Rivet will maximize the achievable score and leave ${pilot.gap} points for manual controls or agents planned for a future release.`}</p></div><div className="flex border border-line h-fit">{([75,90,100] as ReadinessTarget[]).map((value) => <button key={value} onClick={() => chooseTarget(value)} className={`px-4 py-2 text-xs ${target === value ? "bg-accent text-black" : "text-zinc-500"}`}>{value === 75 ? "Candidate 75+" : value === 90 ? "Ready 90+" : "Maximum"}</button>)}</div></div>{!pilot.achievable && <div className="mt-4 space-y-2">{pilot.unsupported.map((finding) => <div className="flex justify-between text-xs border-t border-line pt-2" key={finding.id}><span>{finding.title}</span><span className="text-zinc-600">{futureAgents[finding.agentId] || "Manual work"} · future release</span></div>)}</div>}</section>
       <section className="panel p-4 mb-4">
         <div className="flex flex-wrap justify-between gap-3 items-center"><div><p className="label">EXECUTION MODE</p><p className="text-xs text-zinc-500 mt-1">Choose the cost, speed, and report-depth trade-off.</p></div><div className="flex border border-line">{(["fast", "balanced", "quality"] as ExecutionMode[]).map((mode) => <button key={mode} onClick={() => setExecutionMode(mode)} className={`px-4 py-2 text-xs capitalize ${executionMode === mode ? "bg-accent text-black" : "text-zinc-500 hover:text-white"}`}>{mode === "quality" ? "Maximum quality" : mode}</button>)}</div></div>
         <div className="grid md:grid-cols-3 gap-3 mt-4"><Metric label="ESTIMATED TOKENS" value={`~${estimatedTokens.toLocaleString()}`}/><Metric label="ESTIMATED COST" value={`~$${estimatedCost.toFixed(3)}`}/><Metric label="ESTIMATED TIME" value={executionMode === "fast" ? "20–45 sec" : executionMode === "quality" ? "90–180 sec" : "45–90 sec"}/></div>
@@ -1015,6 +1053,7 @@ function Execution({
   progress,
   elapsedSeconds,
   metrics,
+  target,
   onStart,
   onReview,
 }: {
@@ -1026,6 +1065,7 @@ function Execution({
   progress: Record<string, "queued" | "running" | "complete" | "cached" | "failed">;
   elapsedSeconds: number;
   metrics: Record<string, AgentMetric>;
+  target: ReadinessTarget;
   onStart: () => void;
   onReview: () => void;
 }) {
@@ -1054,6 +1094,7 @@ function Execution({
   const remaining = Math.max(0, etaRange[1] - elapsedSeconds);
   const completedAgents = selected.filter((id) => ["complete", "cached", "failed"].includes(progress[id])).length;
   const actualTokens = Object.values(metrics).reduce((sum, metric) => sum + metric.totalTokens, 0);
+  const pilot = pilotAssessment(result.findings, result.score, target);
   return (
     <>
       <PageTitle
@@ -1070,6 +1111,7 @@ function Execution({
           </button>
         )}
       </PageTitle>
+      <div className="panel p-4 mb-4 grid grid-cols-3 gap-3"><Metric label="TARGET" value={`${target}+`}/><Metric label="PILOT MAXIMUM" value={`~${pilot.maximum}`}/><Metric label="TARGET STATUS" value={pilot.achievable ? "In reach" : `${pilot.gap} point gap`}/></div>
       <div className="panel p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3"><Metric label="MODE" value={mode === "quality" ? "Maximum quality" : mode}/><Metric label="ELAPSED" value={formatDuration(elapsedSeconds)}/><Metric label="PROGRESS" value={`${completedAgents}/${selected.length} agents`}/><Metric label="ETA" value={state === "complete" ? "Complete" : remaining ? `~${formatDuration(remaining)} remaining` : "Finishing…"}/></div>
       <div className="grid lg:grid-cols-[1fr_340px] gap-4">
         <section className="panel">
@@ -1122,6 +1164,7 @@ function Execution({
 
 function Changes({
   changes,
+  target,
   reports,
   metrics,
   mode,
@@ -1130,6 +1173,7 @@ function Changes({
   onPR,
 }: {
   changes: ProposedChange[];
+  target: ReadinessTarget;
   reports: Record<string, string>;
   metrics: Record<string, AgentMetric>;
   mode: ExecutionMode;
@@ -1239,6 +1283,7 @@ function Changes({
           reports={reports}
           metrics={metrics}
           mode={mode}
+          target={target}
         />
       )}
     </>
@@ -1252,6 +1297,7 @@ function ReviewTab({
   reports,
   metrics,
   mode,
+  target,
 }: {
   tab: string;
   result: AnalysisResult;
@@ -1259,10 +1305,13 @@ function ReviewTab({
   reports: Record<string, string>;
   metrics: Record<string, AgentMetric>;
   mode: ExecutionMode;
+  target: ReadinessTarget;
 }) {
+  const pilot = pilotAssessment(result.findings, result.score, target);
   if (tab === "Overview")
     return (
       <div className="panel p-6">
+        <div className="grid md:grid-cols-5 gap-3 mb-6"><Metric label="ORIGINAL" value={String(result.score)}/><Metric label="PROJECTED" value={`~${result.projectedScore}`}/><Metric label="VALIDATED" value="Pending"/><Metric label="TARGET" value={`${target}+`}/><Metric label="PILOT MAX" value={`~${pilot.maximum}`}/></div>
         <h3>{changes.length} proposed files</h3>
         <p className="text-zinc-500 text-sm mt-2">
           These proposals address {new Set(changes.map((c) => c.agentId)).size}{" "}
@@ -1270,6 +1319,7 @@ function ReviewTab({
           approximately {result.projectedScore}. No target repository files have
           been changed.
         </p>
+        <p className="text-xs text-amber-300 mt-4">Projected improvement is not a validated result. Rivet only treats a score as validated after the proposed branch is checked and re-analysed.</p>
       </div>
     );
   if (tab === "Agent Reports")
@@ -2176,17 +2226,20 @@ function formatDuration(seconds: number) {
 
 function Reports({
   result,
+  target,
   selected,
   changes,
   onReanalyse,
   onAnother,
 }: {
   result: AnalysisResult;
+  target: ReadinessTarget;
   selected: AgentId[];
   changes: ProposedChange[];
   onReanalyse: () => void;
   onAnother: () => void;
 }) {
+  const pilot = pilotAssessment(result.findings, result.score, target);
   function download() {
     const blob = new Blob(
       [
@@ -2212,17 +2265,19 @@ function Reports({
           <Download size={15} /> Export JSON
         </button>
       </PageTitle>
-      <div className="grid md:grid-cols-4 gap-3">
+      <div className="grid md:grid-cols-5 gap-3">
         <Metric label="ORIGINAL SCORE" value={String(result.score)} />
         <Metric label="PROJECTED SCORE" value={String(result.projectedScore)} />
-        <Metric
-          label="FINDINGS"
-          value={String(
-            result.findings.filter((f) => f.status === "failed").length,
-          )}
-        />
-        <Metric label="PROPOSALS" value={String(changes.length)} />
+        <Metric label="VALIDATED SCORE" value="Pending" />
+        <Metric label="TARGET" value={`${target}+`} />
+        <Metric label="PILOT MAXIMUM" value={`~${pilot.maximum}`} />
       </div>
+      <section className={`panel p-6 mt-4 ${pilot.achievable ? "border-emerald-500/30" : "border-amber-400/30"}`}>
+        <p className="label">PATH TO PRODUCTION READY</p>
+        <h3 className="mt-2">{pilot.achievable ? `The ${target}+ target is within the pilot's supported scope.` : `The four-agent pilot can raise this repository to approximately ${pilot.maximum}.`}</h3>
+        <p className="text-sm text-zinc-500 mt-3 leading-6">{pilot.achievable ? "Rivet has proposed the supported changes. The score remains projected until the branch passes checks and is re-analysed." : `Reaching ${target}+ requires ${pilot.unsupported.length} control${pilot.unsupported.length === 1 ? "" : "s"} that this MVP cannot yet implement automatically. Additional specialist agents are planned for a future Rivet release.`}</p>
+        {!pilot.achievable && <div className="mt-5 space-y-3">{pilot.unsupported.map((finding) => <div className="flex flex-wrap justify-between gap-2 border-t border-line pt-3 text-sm" key={finding.id}><span>{finding.title}</span><span className="text-zinc-500">{futureAgents[finding.agentId] || "Manual implementation"} · +{scoreRecovery[finding.severity]} potential points</span></div>)}</div>}
+      </section>
       <section className="panel p-6 mt-4">
         <h3>Assessment limitations</h3>
         <ul className="mt-4 space-y-3 text-sm text-zinc-500">
