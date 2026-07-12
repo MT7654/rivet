@@ -2,6 +2,11 @@
 
 Rivet turns AI-generated prototypes into reviewable production-readiness improvements. It can inspect public GitHub repositories, run deterministic production-readiness checks, coordinate specialist agents using GLM 5.2 with automatic Qwen 3.6 fallback, generate remediation proposals, and create draft pull requests after explicit authorization.
 
+## Demo and pitch
+
+- [Watch the video demo](https://drive.google.com/file/d/1D-dEj2r4nJqsI5b1QzZYm5s7frNoAS4e/view?usp=drive_link)
+- [View the pitch deck](https://docs.google.com/presentation/d/1GJUowi0MdTn58wPG7CP-GGujsxe1JYZX/edit?usp=drive_link&ouid=108466079302822283775&rtpof=true&sd=true)
+
 ## Run locally
 
 ```bash
