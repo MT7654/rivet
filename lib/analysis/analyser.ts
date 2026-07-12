@@ -1,0 +1,48 @@
+import type { AnalysisResult, Finding, RepositoryFile, RepositoryMetadata, Technology } from "./types";
+
+const has = (files: RepositoryFile[], test: RegExp) => files.some((file) => test.test(file.path));
+const contents = (files: RepositoryFile[]) => files.map((file) => `${file.path}\n${file.content}`).join("\n");
+
+export function analyseRepository(repository: RepositoryMetadata, files: RepositoryFile[]): AnalysisResult {
+  const all = contents(files);
+  const packageFile = files.find((file) => file.path === "package.json");
+  let pkg: Record<string, any> = {};
+  try { pkg = packageFile ? JSON.parse(packageFile.content) : {}; } catch { /* reported below */ }
+  const scripts = pkg.scripts || {};
+  const dependencies = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const findings: Finding[] = [];
+  const add = (finding: Omit<Finding, "id">) => findings.push({ id: `finding-${findings.length + 1}`, ...finding });
+  const failed = (category: string, title: string, severity: Finding["severity"], explanation: string, remediation: string, file: string, evidence: string, agentId: string, autoFixable = true, effort = "1–2 hours") => add({ category, title, status: "failed", severity, explanation, remediation, file, evidence, confidence: 92, agentId, autoFixable, effort });
+  const passed = (category: string, title: string, file: string, evidence: string) => add({ category, title, status: "passed", severity: "low", explanation: "The repository contains the expected production control.", remediation: "No action required.", file, evidence, confidence: 90, agentId: "none", autoFixable: false, effort: "None" });
+
+  if (!packageFile) failed("Build", "Package manifest not found", "high", "Rivet could not identify Node.js scripts or dependency controls.", "Add a valid package.json or use a supported stack.", "package.json", "File not present in analysed context", "cicd", false, "2–4 hours");
+  else passed("Build", "Package manifest detected", "package.json", "package.json is present");
+  if (!scripts.build) failed("CI/CD", "Automated build script is missing", "high", "A repeatable production build cannot be verified.", "Add a deterministic build script to package.json.", "package.json", "scripts.build is absent", "cicd"); else passed("CI/CD", "Automated build configured", "package.json", `build: ${scripts.build}`);
+  if (!scripts.test || /no test specified/i.test(String(scripts.test))) failed("Testing", "Automated test script is missing", "high", "Regressions cannot be detected before release.", "Add unit tests and a non-placeholder test script.", "package.json", "No usable scripts.test entry", "testing", true, "4–8 hours"); else passed("Testing", "Automated tests configured", "package.json", `test: ${scripts.test}`);
+  if (!scripts.lint) failed("CI/CD", "Lint quality gate is missing", "medium", "Static quality issues may reach production.", "Add a lint script and run it in CI.", "package.json", "scripts.lint is absent", "cicd"); else passed("CI/CD", "Linting configured", "package.json", `lint: ${scripts.lint}`);
+  if (!scripts.typecheck && !scripts["type-check"]) failed("CI/CD", "Explicit type-check gate is missing", "medium", "The build may not expose type errors as a distinct quality gate.", "Add a typecheck script using tsc --noEmit.", "package.json", "No typecheck script", "cicd"); else passed("CI/CD", "Type checking configured", "package.json", "Type-check script detected");
+  if (!has(files, /^\.github\/workflows\/.*\.ya?ml$/)) failed("CI/CD", "GitHub Actions workflow is missing", "high", "Pull requests are not protected by automated build and test checks.", "Add a CI workflow for install, lint, typecheck, tests, and build.", ".github/workflows/ci.yml", "No workflow file found", "cicd"); else passed("CI/CD", "GitHub Actions workflow detected", ".github/workflows", "Workflow YAML found");
+  if (!has(files, /(^|\/)\.env\.example$/)) failed("Secrets", "Environment variable template is missing", "medium", "Required configuration is undocumented.", "Add a redacted .env.example containing variable names only.", ".env.example", "File not found", "security"); else passed("Secrets", "Environment template detected", ".env.example", ".env.example is present");
+  const gitignore = files.find((file) => file.path === ".gitignore")?.content || "";
+  if (!/\.env(\*|\b|\.)/.test(gitignore)) failed("Secrets", "Environment files may be tracked", "critical", "Local credentials could be committed to source control.", "Exclude .env and environment-specific variants in .gitignore.", ".gitignore", "No .env exclusion detected", "security"); else passed("Secrets", "Environment files excluded", ".gitignore", ".env exclusion detected");
+  const secretMatch = all.match(/(?:hf_|ghp_|sk-)[A-Za-z0-9_-]{16,}/);
+  if (secretMatch) failed("Secrets", "Credential-like value detected in source", "critical", "A token-shaped value appears in repository content and may be publicly retrievable.", "Revoke the token, remove it from history, and use a secret store.", files.find((file) => file.content.includes(secretMatch[0]))?.path || "source", "Token-shaped value detected and redacted", "security", false, "1–3 hours"); else passed("Secrets", "No common credential patterns detected", "repository", "Common token patterns were not found");
+  if (/console\.(log|error|warn)\s*\(/.test(all)) failed("Observability", "Unstructured console logging detected", "medium", "Logs lack consistent fields, request IDs, and redaction controls.", "Introduce a structured logger and replace production console calls.", files.find((file) => /console\.(log|error|warn)\s*\(/.test(file.content))?.path || "source", "console.* call detected", "observability"); else passed("Observability", "No basic console logging detected", "source", "No console logging in analysed files");
+  if (!has(files, /(health|healthz)\/(route|index)\.(ts|tsx|js)$/i)) failed("Monitoring", "Health-check endpoint is missing", "medium", "Deployment platforms cannot reliably determine service health.", "Add a lightweight health endpoint with build metadata.", "app/api/health/route.ts", "No health route found", "observability"); else passed("Monitoring", "Health-check endpoint detected", "health route", "Health endpoint path found");
+  if (!/(zod|joi|valibot|yup)/.test(Object.keys(dependencies).join(" ")) && has(files, /(api|routes?)\//i)) failed("Security", "Input validation library not detected", "high", "API boundaries may accept malformed or hostile input.", "Validate request bodies and parameters at server boundaries.", "package.json", "API routes found without a common schema library", "security", true, "2–6 hours");
+  if (!/(pino|winston|sentry|opentelemetry)/.test(Object.keys(dependencies).join(" "))) failed("Observability", "Structured logging or error tracking is missing", "medium", "Production failures may be difficult to investigate.", "Add structured logging and an error-monitoring integration point.", "package.json", "No supported observability dependency detected", "observability");
+  if (!has(files, /(test|spec)\.(ts|tsx|js|jsx)$/i)) failed("Testing", "Test files were not found", "high", "Critical behavior appears to have no executable coverage.", "Add focused tests for API routes and core business logic.", "tests/", "No test/spec files in analysed tree", "testing", true, "4–12 hours"); else passed("Testing", "Test files detected", "tests", "At least one test/spec file found");
+
+  const penalty = findings.filter((f) => f.status === "failed").reduce((sum, f) => sum + ({ critical: 14, high: 9, medium: 5, low: 2 }[f.severity]), 0);
+  const score = Math.max(5, Math.min(96, 100 - penalty));
+  const fixableGain = findings.filter((f) => f.status === "failed" && f.autoFixable).reduce((sum, f) => sum + ({ critical: 10, high: 7, medium: 4, low: 1 }[f.severity]), 0);
+  const technologies: Technology[] = [
+    { name: "Language", value: repository.language || (has(files, /\.tsx?$/) ? "TypeScript" : "Unknown"), confidence: 90, evidence: "GitHub metadata and file extensions" },
+    { name: "Framework", value: dependencies.next ? "Next.js" : dependencies.react ? "React" : dependencies.express ? "Express" : "Experimental support", confidence: dependencies.next ? 98 : 65, evidence: "package.json dependencies" },
+    { name: "Package manager", value: has(files, /^pnpm-lock\.yaml$/) ? "pnpm" : has(files, /^yarn\.lock$/) ? "Yarn" : "npm", confidence: 95, evidence: "Lock file" },
+    { name: "Testing", value: dependencies.vitest ? "Vitest" : dependencies.jest ? "Jest" : dependencies.playwright ? "Playwright" : "Not detected", confidence: 88, evidence: "package.json dependencies" },
+    { name: "CI/CD", value: has(files, /^\.github\/workflows\//) ? "GitHub Actions" : "Not detected", confidence: 96, evidence: ".github/workflows" },
+  ];
+  const failedCount = findings.filter((f) => f.status === "failed").length;
+  return { repository: { ...repository, filesAnalysed: files.length }, score, projectedScore: Math.min(94, score + fixableGain), label: score >= 85 ? "Production Ready" : score >= 70 ? "Production Candidate" : score >= 50 ? "Pre-Production" : score >= 30 ? "Early Stage" : "Prototype", summary: `${repository.name} scored ${score}/100. Rivet inspected ${files.length} relevant files and identified ${failedCount} production-readiness gaps. Prioritise critical credential controls and high-severity build, test, and delivery gaps before release.`, findings, technologies, analysedAt: new Date().toISOString(), mode: "live", limitations: ["Static analysis cannot prove runtime security or test coverage.", "Only relevant text files within context limits were inspected.", "Generated remediations require human review before repository writes."] };
+}

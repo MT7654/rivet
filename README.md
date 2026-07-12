@@ -1,6 +1,6 @@
 # Rivet
 
-Rivet turns AI-generated prototypes into reviewable production-readiness improvements. The included demo walks through audit, agent selection, estimates, proposed changes, simulated validation, and a draft pull-request preview.
+Rivet turns AI-generated prototypes into reviewable production-readiness improvements. It can inspect public GitHub repositories, run deterministic production-readiness checks, coordinate GLM 5.2 specialist agents, generate remediation proposals, and prepare a draft pull-request description.
 
 ## Run locally
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and choose **Open demo**. Production verification: `npm run typecheck && npm run build`.
+Open `http://localhost:3000`, choose **Analyse a repository**, and enter a public GitHub URL. Production verification: `npm run typecheck && npm run build`.
 
 ## Deployment configuration
 
@@ -17,17 +17,20 @@ No Vercel environment variables are required for the hackathon deployment. The t
 
 The current UI intentionally disables repository writes: it never pushes to a default branch, merges, or deploys. A future live GitHub integration should use a separately configured credential rather than embedding a repository write token.
 
-## Real and simulated behavior
+## Live behavior and boundaries
 
-- Real: responsive Next.js application, server-only Hugging Face provider, GLM 5.2 agent endpoint, prompt redaction, model abstraction, production build.
-- Simulated: demo repository analysis, agent execution, diffs, validation, token consumption, and PR preview. All simulated results are labelled.
-- Limitation: live GitHub repository reading/writing and sandboxed patch execution are not connected yet. Provider pricing is deliberately shown as unavailable because it has not been verified.
+- Live: public GitHub metadata, recursive tree ingestion, relevant-file filtering, deterministic checks, readiness scoring, evidence, technology detection, GLM 5.2 agent reports, navigation, filters, generated remediation proposals, report export, and PR-description preview.
+- Optional: a GitHub token can be supplied for a single request to inspect private repositories or increase API limits. The token is not stored.
+- Boundary: proposed changes are not written to the target repository. Creating branches and draft pull requests requires a future GitHub App or user-scoped OAuth connection.
+- Boundary: dependency installation, lint, tests, and build validation require an isolated execution worker or target-repository GitHub Action. Rivet labels these checks as not run.
+- Pricing: monetary estimates are deliberately unavailable because GLM 5.2 provider pricing has not been verified.
 
 ## Three-minute demo
 
 1. Open the landing page and explain the Connect → Audit → Delegate → Validate → Review workflow.
-2. Select **Open demo** and watch the repository audit stages.
-3. Show the 42/100 report, priority evidence, and projected 73/100 score.
-4. Review the four specialist agents, keep Security, Testing, and CI/CD selected, then approve execution.
-5. Walk through the realistic diff and its clearly simulated validation state.
-6. Prepare the draft PR, highlight the human-review requirement, and explain that Rivet cannot merge or deploy automatically.
+2. Enter a public GitHub repository and watch the real ingestion and audit stages.
+3. Show the repository-specific score, detected stack, evidence, and projected score.
+4. Open Findings, use the search and severity filters, and expand an evidence-backed check.
+5. Review the recommended specialist agents and approve execution; GLM 5.2 produces the agent reports.
+6. Walk through generated file proposals, explicit validation boundaries, and the draft PR preview.
+7. Export the final JSON report and highlight the human-review requirement.
